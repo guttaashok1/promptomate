@@ -33,6 +33,7 @@ const GITIGNORE_ADDITIONS = [
   "playwright/.cache/",
   ".playwright-mcp/",
   ".promptomate/auth/",
+  ".promptomate/runs/",
   "triage-report.md",
 ];
 

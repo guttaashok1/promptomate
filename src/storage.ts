@@ -2,6 +2,7 @@ import fs from "fs/promises";
 import path from "path";
 
 const METADATA_DIR = ".promptomate";
+const RUNS_DIR = ".promptomate/runs";
 const TESTS_DIR = "tests";
 
 export interface TestMetadata {
@@ -47,6 +48,30 @@ export async function readMetadata(name: string): Promise<TestMetadata | null> {
 
 export async function readSpec(name: string): Promise<string> {
   return fs.readFile(path.join(TESTS_DIR, `${name}.spec.ts`), "utf8");
+}
+
+export interface LastRun {
+  passed: boolean;
+  output: string;
+  ranAt: string;
+  durationMs: number;
+}
+
+export async function saveLastRun(name: string, run: LastRun): Promise<void> {
+  await fs.mkdir(RUNS_DIR, { recursive: true });
+  await fs.writeFile(
+    path.join(RUNS_DIR, `${name}.json`),
+    JSON.stringify(run, null, 2),
+  );
+}
+
+export async function readLastRun(name: string): Promise<LastRun | null> {
+  try {
+    const raw = await fs.readFile(path.join(RUNS_DIR, `${name}.json`), "utf8");
+    return JSON.parse(raw) as LastRun;
+  } catch {
+    return null;
+  }
 }
 
 export async function listTests(): Promise<Array<TestMetadata & { name: string }>> {

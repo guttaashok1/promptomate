@@ -251,7 +251,8 @@
           const data = await res.json();
           badge.textContent = data.passed ? "passed" : "failed";
           badge.className = `status-badge ${data.passed ? "pass" : "fail"}`;
-          showResult({ summary: data.passed ? "Test passed." : "Test failed.", log: data.output });
+          const dur = data.durationMs ? ` (${(data.durationMs / 1000).toFixed(1)}s)` : "";
+          showResult({ summary: (data.passed ? "Test passed" : "Test failed") + dur, log: data.output });
         } else if (action === "triage") {
           badge.textContent = "triaging";
           badge.className = "status-badge running";
@@ -264,7 +265,7 @@
         } else if (action === "view") {
           const res = await fetch(`/api/test/${encodeURIComponent(name)}`);
           const data = await res.json();
-          showGenerated(data.metadata.summary, data.code, name);
+          showGenerated(data.metadata.summary, data.code, name, undefined, data.lastRun);
         } else if (action === "refine") {
           const instruction = window.prompt(`Refine "${name}" — what should change?\n\nExamples:\n  • also verify the cart badge shows 1\n  • remove the menu button assertion\n  • wait for the toast to appear after clicking Save`);
           if (!instruction) return;
@@ -298,18 +299,61 @@
       `;
     }
 
-    function showGenerated(summary, code, name, usage) {
+    function showGenerated(summary, code, name, usage, lastRun) {
       const usageHtml = usage && usage.line
         ? `<div class="muted" style="margin-top:8px; font-size:12px;">💰 ${escapeHtml(usage.line)}</div>`
         : "";
+      const runHtml = lastRun
+        ? (() => {
+            const badge = lastRun.passed
+              ? `<span class="status-badge pass">✓ passed</span>`
+              : `<span class="status-badge fail">✗ failed</span>`;
+            const when = new Date(lastRun.ranAt).toLocaleString();
+            const dur = lastRun.durationMs ? ` · ${(lastRun.durationMs / 1000).toFixed(1)}s` : "";
+            return `
+              <div style="margin-top:14px; padding:10px 12px; background:#f9fafb; border:1px solid var(--border); border-radius:6px;">
+                <div style="display:flex; gap:8px; align-items:center; margin-bottom:6px;">
+                  ${badge}
+                  <span class="muted" style="font-size:12px;">Last run: ${escapeHtml(when)}${dur}</span>
+                </div>
+                <details><summary style="font-size:12px; color:var(--muted);">Output</summary>
+                  <pre class="code" style="margin-top:8px; max-height:240px;">${escapeHtml(lastRun.output)}</pre>
+                </details>
+              </div>
+            `;
+          })()
+        : `<div class="muted" style="margin-top:14px; font-size:12px;">Not run yet. Click Run now to execute.</div>`;
       resultEl.innerHTML = `
         <div class="summary">${escapeHtml(summary)}</div>
         <pre class="code">${escapeHtml(code)}</pre>
         <div class="row">
           <span class="muted">Saved as tests/${escapeHtml(name)}.spec.ts</span>
+          <button data-run-inline="${escapeHtml(name)}">Run now</button>
         </div>
+        ${runHtml}
         ${usageHtml}
       `;
+      const btn = resultEl.querySelector("[data-run-inline]");
+      if (btn) btn.addEventListener("click", () => inlineRun(name));
+    }
+
+    async function inlineRun(name) {
+      const btn = resultEl.querySelector(`[data-run-inline="${CSS.escape(name)}"]`);
+      if (btn) { btn.disabled = true; btn.textContent = "Running…"; }
+      try {
+        const res = await fetch(`/api/run/${encodeURIComponent(name)}`, { method: "POST" });
+        const data = await res.json();
+        const detail = await fetch(`/api/test/${encodeURIComponent(name)}`).then(r => r.json());
+        showGenerated(detail.metadata.summary, detail.code, name, undefined, detail.lastRun);
+        const row = document.querySelector(`tr[data-name="${CSS.escape(name)}"] [data-status]`);
+        if (row) {
+          row.textContent = data.passed ? "passed" : "failed";
+          row.className = `status-badge ${data.passed ? "pass" : "fail"}`;
+        }
+      } catch (err) {
+        if (btn) { btn.disabled = false; btn.textContent = "Run now"; }
+        showResult({ summary: "Run error", log: err.message });
+      }
     }
 
     function showTriage(result) {

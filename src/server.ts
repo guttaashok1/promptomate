@@ -6,7 +6,7 @@ import path from "path";
 import { fileURLToPath } from "url";
 import { exploreAndGenerate, type ProgressEvent } from "./explore.js";
 import { refineTest } from "./refine.js";
-import { listTests, readMetadata, readSpec } from "./storage.js";
+import { listTests, readLastRun, readMetadata, readSpec, saveLastRun } from "./storage.js";
 import { triage, triageAndApply } from "./triage.js";
 import { formatSummaryLine, resetUsage, summarize } from "./usage.js";
 
@@ -38,10 +38,12 @@ export function startServer(port: number): void {
   });
 
   app.get("/api/test/:name", async (req: Request, res: Response) => {
-    const metadata = await readMetadata(String(req.params.name));
+    const name = String(req.params.name);
+    const metadata = await readMetadata(name);
     if (!metadata) return res.status(404).json({ error: "not found" });
-    const code = await readSpec(String(req.params.name)).catch(() => "");
-    res.json({ metadata, code });
+    const code = await readSpec(name).catch(() => "");
+    const lastRun = await readLastRun(name);
+    res.json({ metadata, code, lastRun });
   });
 
   app.post("/api/explore", async (req: Request, res: Response) => {
@@ -113,14 +115,23 @@ export function startServer(port: number): void {
   });
 
   app.post("/api/run/:name", async (req: Request, res: Response) => {
-    const specPath = path.join("tests", `${String(req.params.name)}.spec.ts`);
+    const name = String(req.params.name);
+    const specPath = path.join("tests", `${name}.spec.ts`);
     try {
       await fs.access(specPath);
     } catch {
       return res.status(404).json({ error: "test not found" });
     }
+    const startedAt = Date.now();
     const result = await runPlaywright(specPath);
-    res.json(result);
+    const durationMs = Date.now() - startedAt;
+    await saveLastRun(name, {
+      passed: result.passed,
+      output: result.output,
+      ranAt: new Date().toISOString(),
+      durationMs,
+    });
+    res.json({ ...result, durationMs });
   });
 
   app.post("/api/refine/:name", async (req: Request, res: Response) => {
