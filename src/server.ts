@@ -191,7 +191,11 @@ export function startServer(port: number): void {
   });
 
   app.listen(port, () => {
-    console.log(`Promptomate UI running at http://localhost:${port}`);
+    if (process.env.RENDER_EXTERNAL_URL) {
+      console.log(`Promptomate UI listening on port ${port} — public URL: ${process.env.RENDER_EXTERNAL_URL}`);
+    } else {
+      console.log(`Promptomate UI running at http://localhost:${port}`);
+    }
   });
 }
 
