@@ -62,6 +62,19 @@ npm run dev -- heal <name>
 
 **`heal`** — on a locator failure, re-snapshots the page and regenerates the test with the latest DOM + prior failure context.
 
+## Visual assertions
+
+DOM-based assertions are fast and free but can't judge things like "looks like an error state" or "the chart shows a downward trend." For those, generated specs can import a Claude-vision-powered helper:
+
+```ts
+import { expectVisual } from "../src/assertions.js";
+
+await expectVisual(page, "a red error banner above the Login button");
+await expectVisual(page.getByRole("figure"), "a rendered image of a shoe, not a broken-image placeholder");
+```
+
+`expectVisual` takes a screenshot of the target (Page or Locator), sends it to Claude with the description, and throws if Claude judges it a fail. Costs one API call (~$0.01) and ~1s per assertion. The explore agent decides when to reach for it vs. a cheaper DOM check — during exploration it can also call `screenshot()` to see the actual render when the ARIA tree is ambiguous.
+
 Tests are stored as `(prompt, generated code, URL)` triples under `.promptomate/`, so either surface — prompt or code — can be edited.
 
 ## Roadmap

@@ -8,6 +8,10 @@ import { saveMetadata, slugify } from "./storage.js";
 const MODEL = process.env.PROMPTOMATE_MODEL ?? "claude-opus-4-7";
 const MAX_ITERATIONS = 25;
 
+type ToolContent = string | Array<
+  Anthropic.Messages.TextBlockParam | Anthropic.Messages.ImageBlockParam
+>;
+
 const SYSTEM_PROMPT = `You are a QA automation agent. Given a scenario and a starting URL, explore the live page with your browser tools to confirm the flow works, then emit a Playwright test that reproduces it.
 
 Exploration rules:
@@ -15,16 +19,26 @@ Exploration rules:
 - Prefer semantic locators: role + accessible name as shown in the snapshot.
 - After every action you get a fresh snapshot — verify the page changed as expected before proceeding.
 - If an action fails, adapt: try a different role, different name, or an alternative path.
+- Use screenshot() when the ARIA snapshot is ambiguous, when visual-only content matters (colors, layout, images, charts), or before writing a visual assertion.
 - Keep exploration minimal: usually 4-10 tool calls is enough. Stop once you've proven the scenario end-to-end.
+
+Assertion guidance for the generated test:
+- Default to DOM-based assertions: toHaveURL, toHaveText, toBeVisible — fast, cheap, deterministic.
+- Use expectVisual(page, "<description>") for semantic/visual checks that DOM assertions can't express cleanly:
+  - "an error banner styled to look like a warning"
+  - "a loading spinner in the center of the viewport"
+  - "a chart showing a downward trend"
+  - "a rendered image of a shoe, not a broken-image placeholder"
+- Do NOT use expectVisual for things DOM assertions already cover. Visual assertions cost an API call and add ~1s.
+- Import from a relative path: import { expectVisual } from "../src/assertions.js";
 
 When done, STOP calling tools and respond with exactly two XML blocks:
 <summary>One-sentence summary of what the test verifies.</summary>
 <code>
 // complete TypeScript Playwright .spec.ts file.
-// Import { test, expect } from "@playwright/test".
+// Import { test, expect } from "@playwright/test" — and expectVisual from "../src/assertions.js" if used.
 // Use the exact locators that worked during your exploration.
 // Prefer getByRole / getByText / getByLabel. Never use CSS selectors.
-// Include meaningful assertions (toHaveURL, toBeVisible, toHaveText, etc.).
 </code>
 
 Do not wrap the code in markdown fences. Do not add commentary outside these two blocks.`;
@@ -81,6 +95,11 @@ const TOOLS: Anthropic.Tool[] = [
   {
     name: "snapshot",
     description: "Get a fresh ARIA snapshot of the current page without acting.",
+    input_schema: { type: "object", properties: {}, required: [] },
+  },
+  {
+    name: "screenshot",
+    description: "Capture a visual screenshot of the current page plus the ARIA snapshot. Use this when visual-only content matters (colors, layout, images, charts) or when the ARIA tree is ambiguous.",
     input_schema: { type: "object", properties: {}, required: [] },
   },
 ];
@@ -169,7 +188,7 @@ async function executeTool(
   name: string,
   input: unknown,
   page: Page,
-): Promise<{ ok: boolean; content: string }> {
+): Promise<{ ok: boolean; content: ToolContent }> {
   const args = input as Record<string, unknown>;
   try {
     switch (name) {
@@ -202,6 +221,21 @@ async function executeTool(
       }
       case "snapshot": {
         return { ok: true, content: await formatPageState(page) };
+      }
+      case "screenshot": {
+        const buffer = await page.screenshot({ type: "jpeg", quality: 80, fullPage: false });
+        const base64 = buffer.toString("base64");
+        const state = await formatPageState(page);
+        return {
+          ok: true,
+          content: [
+            {
+              type: "image",
+              source: { type: "base64", media_type: "image/jpeg", data: base64 },
+            },
+            { type: "text", text: state },
+          ],
+        };
       }
       default:
         return { ok: false, content: `Unknown tool: ${name}` };
