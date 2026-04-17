@@ -60,11 +60,11 @@ npm run dev -- triage <name>
 2. Claude Opus 4.7 emits a `.spec.ts` file using semantic locators.
 3. Playwright runs the spec with screenshots and traces on failure.
 
-**`explore`** — agentic:
-1. Launch a persistent Playwright session.
-2. Claude gets `navigate`, `click`, `fill`, `press`, `snapshot` tools and drives the browser itself — clicking through the flow until the scenario is proven end-to-end.
-3. Each tool result returns the updated ARIA snapshot so Claude can verify state after every action.
-4. When done, Claude emits a standalone `.spec.ts` using the exact locators that worked.
+**`explore`** — agentic, MCP-backed:
+1. Spawn Microsoft's **Playwright MCP server** as a subprocess (`@playwright/mcp`).
+2. Bridge its tool surface into the Anthropic API via `@modelcontextprotocol/sdk` — Claude gets `browser_navigate`, `browser_click`, `browser_hover`, `browser_drag`, `browser_type`, `browser_fill_form`, `browser_press_key`, `browser_snapshot`, `browser_take_screenshot`, `browser_file_upload`, `browser_tab_*`, `browser_network_requests`, `browser_console_messages`, `browser_wait_for`, etc.
+3. Claude drives the browser: each tool call goes MCP client → server → real Chromium and returns an updated snapshot + refs.
+4. When done, Claude emits a standalone `.spec.ts` using regular Playwright locators (`getByRole` / `getByText`) — the spec does NOT depend on MCP at runtime.
 
 **`heal`** — on a locator failure, re-snapshots the page and regenerates the test with the latest DOM + prior failure context.
 

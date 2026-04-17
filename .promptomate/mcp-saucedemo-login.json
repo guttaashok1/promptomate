@@ -1,0 +1,6 @@
+{
+  "prompt": "log in as standard_user with password secret_sauce and verify the products page appears",
+  "url": "https://www.saucedemo.com",
+  "summary": "Verifies that logging in as standard_user with password secret_sauce navigates to the inventory (Products) page with product items displayed.",
+  "createdAt": "2026-04-17T07:29:57.017Z"
+}
