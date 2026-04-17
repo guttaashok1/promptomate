@@ -41,6 +41,7 @@
     "build": "tsc && cp -r public dist/ 2>/dev/null || true",
     "dev": "tsx src/cli.ts",
     "test": "playwright test",
+    "test:unit": "vitest run",
     "typecheck": "tsc --noEmit",
     "prepublishOnly": "npm run build"
   },
@@ -57,6 +58,7 @@
     "@types/express": "^5.0.6",
     "@types/node": "^22.10.0",
     "tsx": "^4.19.2",
-    "typescript": "^5.7.2"
+    "typescript": "^5.7.2",
+    "vitest": "^4.1.4"
   }
 }
