@@ -200,9 +200,11 @@ program
   .option("-t, --tag <tag>", "Only run tests with this tag (repeatable)", collect, [])
   .option("--changed", "Only run tests whose spec or metadata has changed since <base>")
   .option("--base <ref>", "Base ref for --changed (default: origin/<PR base> or HEAD^)")
-  .action(async (opts: { out: string; maxAttempts: string; model?: string; tag: string[]; changed?: boolean; base?: string }) => {
+  .option("-c, --concurrency <n>", "Run this many tests in parallel (default 1)", "1")
+  .action(async (opts: { out: string; maxAttempts: string; model?: string; tag: string[]; changed?: boolean; base?: string; concurrency: string }) => {
     resetUsage();
     const max = Math.max(1, parseInt(opts.maxAttempts, 10) || 3);
+    const concurrency = Math.max(1, parseInt(opts.concurrency, 10) || 1);
     let onlyNames: string[] | undefined;
     if (opts.changed) {
       const { changedFiles, defaultBaseRef, testsAffectedByDiff } = await import("./git-diff.js");
@@ -212,10 +214,15 @@ program
       onlyNames = testsAffectedByDiff(all, files);
       console.log(`--changed: base=${base}, ${files.length} files changed, ${onlyNames.length} tests affected`);
     }
-    const { report, exitCode } = await runCi(max, opts.model, {
-      tags: opts.tag.length ? opts.tag : undefined,
-      onlyNames,
-    });
+    const { report, exitCode } = await runCi(
+      max,
+      opts.model,
+      {
+        tags: opts.tag.length ? opts.tag : undefined,
+        onlyNames,
+      },
+      concurrency,
+    );
     await fs.writeFile(opts.out, report);
     console.log(`\nReport written to ${opts.out}`);
     console.log(report);

@@ -19,6 +19,7 @@ export async function runCi(
   maxAttempts = 3,
   model?: string,
   filters: { tags?: string[]; onlyNames?: string[] } = {},
+  concurrency = 1,
 ): Promise<CiResult> {
   let tests = await listTests();
   if (filters.tags && filters.tags.length > 0) {
@@ -38,13 +39,27 @@ export async function runCi(
     };
   }
 
-  const results: TestRunResult[] = [];
-  for (const t of tests) {
-    console.log(`\n========== ${t.name} ==========`);
-    const apply = await triageAndApply(t.name, maxAttempts, model);
-    const status = computeStatus(apply);
-    results.push({ name: t.name, status, apply });
+  const results: TestRunResult[] = new Array(tests.length);
+  const queue = tests.map((t, idx) => ({ t, idx }));
+  const n = Math.max(1, Math.min(concurrency, tests.length));
+  if (n > 1) {
+    console.log(
+      `\nRunning ${tests.length} tests with concurrency ${n} (logs may interleave)`,
+    );
   }
+
+  const worker = async () => {
+    while (true) {
+      const next = queue.shift();
+      if (!next) return;
+      const { t, idx } = next;
+      console.log(`\n========== ${t.name} ==========`);
+      const apply = await triageAndApply(t.name, maxAttempts, model);
+      const status = computeStatus(apply);
+      results[idx] = { name: t.name, status, apply };
+    }
+  };
+  await Promise.all(Array.from({ length: n }, () => worker()));
 
   return formatReport(results);
 }
