@@ -1,0 +1,368 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Promptomate</title>
+  <style>
+    :root {
+      --bg: #fafafa;
+      --panel: #ffffff;
+      --border: #e5e7eb;
+      --text: #111827;
+      --muted: #6b7280;
+      --accent: #2563eb;
+      --accent-hover: #1d4ed8;
+      --ok: #059669;
+      --fail: #dc2626;
+      --drift: #d97706;
+      --code-bg: #0f172a;
+      --code-text: #e2e8f0;
+    }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      font-size: 14px;
+      line-height: 1.5;
+    }
+    header {
+      background: var(--panel);
+      border-bottom: 1px solid var(--border);
+      padding: 14px 24px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    header h1 { font-size: 18px; font-weight: 600; margin: 0; }
+    header .tagline { color: var(--muted); font-size: 13px; }
+    main { padding: 24px; max-width: 1200px; margin: 0 auto; display: grid; gap: 20px; }
+    .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+    @media (max-width: 900px) { .grid { grid-template-columns: 1fr; } }
+    .panel {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 20px;
+    }
+    .panel h2 { margin: 0 0 14px; font-size: 15px; font-weight: 600; }
+    label { display: block; font-size: 12px; font-weight: 600; color: var(--muted); margin-bottom: 6px; text-transform: uppercase; letter-spacing: 0.03em; }
+    input, textarea {
+      width: 100%;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 10px 12px;
+      font: inherit;
+      font-size: 14px;
+      background: var(--panel);
+      color: var(--text);
+    }
+    textarea { min-height: 80px; resize: vertical; }
+    input:focus, textarea:focus { outline: 2px solid var(--accent); outline-offset: -1px; border-color: transparent; }
+    .field { margin-bottom: 14px; }
+    button {
+      border: none;
+      border-radius: 8px;
+      padding: 9px 16px;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      background: var(--accent);
+      color: white;
+      transition: background 0.15s;
+    }
+    button:hover { background: var(--accent-hover); }
+    button:disabled { background: #9ca3af; cursor: not-allowed; }
+    button.secondary { background: #f3f4f6; color: var(--text); }
+    button.secondary:hover { background: #e5e7eb; }
+    .log {
+      background: #f9fafb;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 12px;
+      font-family: ui-monospace, "SF Mono", Menlo, monospace;
+      font-size: 12px;
+      max-height: 280px;
+      overflow-y: auto;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+    .log .step { padding: 2px 0; }
+    .log .ok { color: var(--ok); }
+    .log .fail { color: var(--fail); }
+    .log .meta { color: var(--muted); }
+    .log .error { color: var(--fail); font-weight: 600; }
+    pre.code {
+      background: var(--code-bg);
+      color: var(--code-text);
+      border-radius: 8px;
+      padding: 16px;
+      font-family: ui-monospace, "SF Mono", Menlo, monospace;
+      font-size: 12px;
+      max-height: 420px;
+      overflow: auto;
+      line-height: 1.5;
+    }
+    .summary {
+      background: #eef2ff;
+      border-left: 3px solid var(--accent);
+      padding: 10px 14px;
+      border-radius: 4px;
+      font-size: 13px;
+      margin: 12px 0;
+    }
+    table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    th, td { text-align: left; padding: 10px 12px; border-bottom: 1px solid var(--border); vertical-align: middle; }
+    th { font-size: 12px; color: var(--muted); font-weight: 600; text-transform: uppercase; letter-spacing: 0.03em; }
+    tr:hover td { background: #f9fafb; }
+    .actions { display: flex; gap: 6px; }
+    .actions button { padding: 5px 10px; font-size: 12px; font-weight: 500; }
+    .status-badge { display: inline-block; padding: 2px 8px; border-radius: 12px; font-size: 11px; font-weight: 600; }
+    .status-badge.pass { background: #d1fae5; color: #065f46; }
+    .status-badge.fail { background: #fee2e2; color: #991b1b; }
+    .status-badge.drift { background: #fef3c7; color: #92400e; }
+    .status-badge.running { background: #dbeafe; color: #1e40af; }
+    .muted { color: var(--muted); font-size: 13px; }
+    .row { display: flex; gap: 12px; align-items: center; margin-top: 12px; flex-wrap: wrap; }
+    details { margin-top: 12px; }
+    summary { cursor: pointer; font-size: 12px; color: var(--muted); font-weight: 600; }
+    .truncate { max-width: 340px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; display: inline-block; vertical-align: bottom; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>🤖 Promptomate</h1>
+    <span class="tagline">Prompt-driven Playwright tests with self-healing locators</span>
+  </header>
+
+  <main>
+    <section class="panel">
+      <h2>Generate a new test</h2>
+      <div class="field">
+        <label for="prompt">Scenario</label>
+        <textarea id="prompt" placeholder="e.g. log in as standard_user with password secret_sauce and verify the products page appears"></textarea>
+      </div>
+      <div class="field">
+        <label for="url">Starting URL</label>
+        <input id="url" type="url" placeholder="https://www.saucedemo.com" />
+      </div>
+      <div class="row">
+        <button id="go">Explore &amp; generate</button>
+        <span id="status" class="muted"></span>
+      </div>
+    </section>
+
+    <div class="grid">
+      <section class="panel">
+        <h2>Live progress</h2>
+        <div id="log" class="log"><span class="meta">Waiting…</span></div>
+      </section>
+
+      <section class="panel">
+        <h2>Generated test</h2>
+        <div id="result">
+          <p class="muted">Nothing generated yet.</p>
+        </div>
+      </section>
+    </div>
+
+    <section class="panel">
+      <h2>Saved tests</h2>
+      <div id="tests-wrap"><p class="muted">Loading…</p></div>
+    </section>
+  </main>
+
+  <script>
+    const $ = (id) => document.getElementById(id);
+    const log = $("log");
+    const statusEl = $("status");
+    const resultEl = $("result");
+    const testsWrap = $("tests-wrap");
+
+    function appendLog(cls, text) {
+      const div = document.createElement("div");
+      div.className = "step " + (cls || "");
+      div.textContent = text;
+      log.appendChild(div);
+      log.scrollTop = log.scrollHeight;
+    }
+
+    function clearLog() {
+      log.innerHTML = "";
+    }
+
+    function previewInput(obj) {
+      const s = JSON.stringify(obj);
+      return s.length > 70 ? s.slice(0, 70) + "…" : s;
+    }
+
+    async function loadTests() {
+      const res = await fetch("/api/tests");
+      const tests = await res.json();
+      if (!tests.length) {
+        testsWrap.innerHTML = '<p class="muted">No saved tests yet. Generate one above.</p>';
+        return;
+      }
+      const rows = tests.map((t) => `
+        <tr data-name="${t.name}">
+          <td><strong>${escapeHtml(t.name)}</strong><div class="muted truncate" title="${escapeHtml(t.prompt)}">${escapeHtml(t.prompt)}</div></td>
+          <td class="muted">${escapeHtml(t.url)}</td>
+          <td><span class="status-badge" data-status></span></td>
+          <td class="actions">
+            <button class="secondary" data-action="run">Run</button>
+            <button class="secondary" data-action="triage">Triage</button>
+            <button class="secondary" data-action="view">View</button>
+          </td>
+        </tr>
+      `).join("");
+      testsWrap.innerHTML = `
+        <table>
+          <thead><tr><th>Test</th><th>URL</th><th>Status</th><th>Actions</th></tr></thead>
+          <tbody>${rows}</tbody>
+        </table>
+      `;
+      testsWrap.querySelectorAll("button[data-action]").forEach((btn) => {
+        btn.addEventListener("click", handleTestAction);
+      });
+    }
+
+    function escapeHtml(s) {
+      return String(s).replace(/[&<>"']/g, (c) => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+    }
+
+    async function handleTestAction(e) {
+      const btn = e.currentTarget;
+      const action = btn.dataset.action;
+      const tr = btn.closest("tr");
+      const name = tr.dataset.name;
+      const badge = tr.querySelector("[data-status]");
+      const origText = btn.textContent;
+      btn.disabled = true;
+      btn.textContent = "…";
+
+      try {
+        if (action === "run") {
+          badge.textContent = "running";
+          badge.className = "status-badge running";
+          const res = await fetch(`/api/run/${encodeURIComponent(name)}`, { method: "POST" });
+          const data = await res.json();
+          badge.textContent = data.passed ? "passed" : "failed";
+          badge.className = `status-badge ${data.passed ? "pass" : "fail"}`;
+          showResult({ summary: data.passed ? "Test passed." : "Test failed.", log: data.output });
+        } else if (action === "triage") {
+          badge.textContent = "triaging";
+          badge.className = "status-badge running";
+          const res = await fetch(`/api/triage/${encodeURIComponent(name)}?apply=true`, { method: "POST" });
+          const data = await res.json();
+          const passed = data.finalStatus === "passed";
+          badge.textContent = passed ? "recovered" : (data.finalVerdict || "failed");
+          badge.className = `status-badge ${passed ? "pass" : data.finalVerdict === "dom_drift" ? "drift" : "fail"}`;
+          showTriage(data);
+        } else if (action === "view") {
+          const res = await fetch(`/api/test/${encodeURIComponent(name)}`);
+          const data = await res.json();
+          showGenerated(data.metadata.summary, data.code, name);
+        }
+      } catch (err) {
+        showResult({ summary: "Error", log: err.message });
+      } finally {
+        btn.disabled = false;
+        btn.textContent = origText;
+      }
+    }
+
+    function showResult(opts) {
+      resultEl.innerHTML = `
+        <div class="summary">${escapeHtml(opts.summary)}</div>
+        <details open><summary>Output</summary>
+          <pre class="code">${escapeHtml(opts.log)}</pre>
+        </details>
+      `;
+    }
+
+    function showGenerated(summary, code, name) {
+      resultEl.innerHTML = `
+        <div class="summary">${escapeHtml(summary)}</div>
+        <pre class="code">${escapeHtml(code)}</pre>
+        <div class="row">
+          <span class="muted">Saved as tests/${escapeHtml(name)}.spec.ts</span>
+        </div>
+      `;
+    }
+
+    function showTriage(result) {
+      const attempts = result.attempts.map((a, i) => {
+        const verdict = a.triage.verdict || "(unknown)";
+        const detail = a.action === "heal" ? `→ heal: ${escapeHtml(a.healSummary || "")}` : `→ ${a.action}`;
+        return `<li>Attempt ${i + 1}: <strong>${verdict}</strong> ${detail}</li>`;
+      }).join("") || "<li>No attempts (passed on first try)</li>";
+      resultEl.innerHTML = `
+        <div class="summary">Triage status: <strong>${escapeHtml(result.finalStatus)}</strong>${result.finalVerdict ? ` · verdict: <strong>${escapeHtml(result.finalVerdict)}</strong>` : ""}</div>
+        <ol>${attempts}</ol>
+      `;
+    }
+
+    $("go").addEventListener("click", async () => {
+      const prompt = $("prompt").value.trim();
+      const url = $("url").value.trim();
+      if (!prompt || !url) {
+        statusEl.textContent = "Scenario and URL required.";
+        return;
+      }
+      statusEl.textContent = "Starting exploration…";
+      $("go").disabled = true;
+      clearLog();
+      resultEl.innerHTML = '<p class="muted">Exploring… (this usually takes 15-60 seconds)</p>';
+
+      let id;
+      try {
+        const res = await fetch("/api/explore", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ prompt, url }),
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || "failed to start");
+        id = data.id;
+      } catch (err) {
+        statusEl.textContent = "";
+        appendLog("error", "Error: " + err.message);
+        $("go").disabled = false;
+        return;
+      }
+
+      const src = new EventSource(`/api/explore/${id}/stream`);
+      src.onmessage = (ev) => {
+        const e = JSON.parse(ev.data);
+        if (e.type === "started") {
+          appendLog("meta", `Navigating to ${e.url}…`);
+        } else if (e.type === "tool_call") {
+          const mark = e.ok ? "✓" : "✗";
+          appendLog(e.ok ? "ok" : "fail", `→ ${e.name}(${previewInput(e.input)}) ${mark}${e.error ? " " + e.error : ""}`);
+        } else if (e.type === "done") {
+          appendLog("ok", `✓ Generated ${e.path}`);
+          statusEl.textContent = "";
+          $("go").disabled = false;
+          showGenerated(e.summary, e.code, e.name);
+          loadTests();
+          src.close();
+        } else if (e.type === "error") {
+          appendLog("error", "Error: " + e.message);
+          statusEl.textContent = "";
+          $("go").disabled = false;
+          src.close();
+        }
+      };
+      src.onerror = () => {
+        statusEl.textContent = "";
+        $("go").disabled = false;
+        src.close();
+      };
+    });
+
+    loadTests();
+  </script>
+</body>
+</html>

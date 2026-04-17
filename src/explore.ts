@@ -49,12 +49,22 @@ When done, STOP calling tools and respond with exactly two XML blocks:
 
 Do not wrap the code in markdown fences. Do not add commentary outside these two blocks.`;
 
+export type ProgressEvent =
+  | { type: "started"; url: string; prompt: string }
+  | { type: "tool_call"; name: string; input: unknown; ok: boolean; error?: string }
+  | { type: "assistant_text"; text: string }
+  | { type: "done"; name: string; path: string; summary: string; code: string }
+  | { type: "error"; message: string };
+
 export async function exploreAndGenerate(opts: {
   prompt: string;
   url: string;
   name?: string;
   headless?: boolean;
+  onProgress?: (event: ProgressEvent) => void;
 }): Promise<{ name: string; path: string; summary: string }> {
+  const emit = (e: ProgressEvent) => opts.onProgress?.(e);
+  emit({ type: "started", url: opts.url, prompt: opts.prompt });
   if (!process.env.ANTHROPIC_API_KEY) {
     throw new Error("ANTHROPIC_API_KEY is not set. Add it to .env.");
   }
@@ -115,6 +125,7 @@ Begin by calling browser_navigate with the starting URL. Then explore until the 
             call.input as Record<string, unknown>,
           );
           console.log(`  → ${call.name}(${preview}) ${mcpResult.isError ? "✗" : "✓"}`);
+          emit({ type: "tool_call", name: call.name, input: call.input, ok: !mcpResult.isError });
           results.push({
             type: "tool_result",
             tool_use_id: call.id,
@@ -122,11 +133,13 @@ Begin by calling browser_navigate with the starting URL. Then explore until the 
             is_error: mcpResult.isError,
           });
         } catch (e) {
-          console.log(`  → ${call.name}(${preview}) ✗ (${(e as Error).message})`);
+          const msg = (e as Error).message;
+          console.log(`  → ${call.name}(${preview}) ✗ (${msg})`);
+          emit({ type: "tool_call", name: call.name, input: call.input, ok: false, error: msg });
           results.push({
             type: "tool_result",
             tool_use_id: call.id,
-            content: `Error: ${(e as Error).message}`,
+            content: `Error: ${msg}`,
             is_error: true,
           });
         }
@@ -146,7 +159,11 @@ Begin by calling browser_navigate with the starting URL. Then explore until the 
       createdAt: new Date().toISOString(),
     });
 
+    emit({ type: "done", name: slug, path: filePath, summary, code });
     return { name: slug, path: filePath, summary };
+  } catch (e) {
+    emit({ type: "error", message: (e as Error).message });
+    throw e;
   } finally {
     await mcp.close();
   }

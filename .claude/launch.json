@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "promptomate",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "dev", "--", "serve", "--port", "3535"],
+      "port": 3535
+    }
+  ]
+}

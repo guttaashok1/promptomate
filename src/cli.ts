@@ -8,6 +8,7 @@ import { runTest } from "./runner.js";
 import { listTests, readSpec, readMetadata } from "./storage.js";
 import { healTest } from "./heal.js";
 import { runCi } from "./ci.js";
+import { startServer } from "./server.js";
 import { triage, triageAndApply } from "./triage.js";
 import fs from "fs/promises";
 
@@ -139,6 +140,15 @@ program
     console.log(`\nReport written to ${opts.out}`);
     console.log(report);
     process.exit(exitCode);
+  });
+
+program
+  .command("serve")
+  .description("Start the Promptomate web UI")
+  .option("-p, --port <port>", "Port to listen on", "3535")
+  .action((opts: { port: string }) => {
+    const port = parseInt(opts.port, 10) || 3535;
+    startServer(port);
   });
 
 program
