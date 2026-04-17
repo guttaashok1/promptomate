@@ -1,12 +1,11 @@
 #!/usr/bin/env node
-import { Command } from "commander";
 import dotenv from "dotenv";
+dotenv.config({ override: true });
+import { Command } from "commander";
 import { generateTest } from "./agent.js";
 import { runTest } from "./runner.js";
 import { listTests, readSpec, readMetadata } from "./storage.js";
 import { healTest } from "./heal.js";
-
-dotenv.config();
 
 const program = new Command();
 
