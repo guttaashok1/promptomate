@@ -1,0 +1,132 @@
+name: "Promptomate CI"
+description: "Auto-triage AI-generated Playwright tests and post a PR comment"
+branding:
+  icon: "zap"
+  color: "blue"
+
+inputs:
+  anthropic-api-key:
+    description: "Anthropic API key (store as a repository secret)"
+    required: true
+  model:
+    description: "Model to use (opus | sonnet | haiku | full id). Defaults to claude-opus-4-7."
+    required: false
+    default: ""
+  max-attempts:
+    description: "Max recovery attempts per failing test (default 3)"
+    required: false
+    default: "3"
+  tests-dir:
+    description: "Directory in the consumer repo containing the Playwright specs"
+    required: false
+    default: "tests"
+  metadata-dir:
+    description: "Directory in the consumer repo containing .promptomate metadata"
+    required: false
+    default: ".promptomate"
+
+runs:
+  using: composite
+  steps:
+    - name: Setup Node
+      uses: actions/setup-node@v4
+      with:
+        node-version: "20"
+
+    - name: Cache Playwright browsers
+      uses: actions/cache@v4
+      with:
+        path: ~/.cache/ms-playwright
+        key: ${{ runner.os }}-playwright-${{ hashFiles('${{ github.action_path }}/package-lock.json') }}
+
+    - name: Install promptomate deps
+      shell: bash
+      working-directory: ${{ github.action_path }}
+      run: npm ci
+
+    - name: Install Chromium
+      shell: bash
+      working-directory: ${{ github.action_path }}
+      run: npx playwright install --with-deps chromium
+
+    - name: Link consumer tests + metadata into action workspace
+      shell: bash
+      working-directory: ${{ github.action_path }}
+      run: |
+        rm -rf tests .promptomate
+        if [ -d "$GITHUB_WORKSPACE/${{ inputs.tests-dir }}" ]; then
+          ln -sfn "$GITHUB_WORKSPACE/${{ inputs.tests-dir }}" tests
+        fi
+        if [ -d "$GITHUB_WORKSPACE/${{ inputs.metadata-dir }}" ]; then
+          ln -sfn "$GITHUB_WORKSPACE/${{ inputs.metadata-dir }}" .promptomate
+        fi
+
+    - name: Run promptomate ci
+      id: run
+      shell: bash
+      working-directory: ${{ github.action_path }}
+      continue-on-error: true
+      env:
+        ANTHROPIC_API_KEY: ${{ inputs.anthropic-api-key }}
+      run: |
+        MODEL_FLAG=""
+        if [ -n "${{ inputs.model }}" ]; then
+          MODEL_FLAG="--model ${{ inputs.model }}"
+        fi
+        npm run dev -- ci \
+          --out "$GITHUB_WORKSPACE/triage-report.md" \
+          --max-attempts "${{ inputs.max-attempts }}" \
+          $MODEL_FLAG
+
+    - name: Upload triage report artifact
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: promptomate-report
+        path: triage-report.md
+        if-no-files-found: warn
+
+    - name: Upsert PR comment
+      if: github.event_name == 'pull_request' && always()
+      uses: actions/github-script@v7
+      with:
+        script: |
+          const fs = require('fs');
+          const path = require('path');
+          const reportPath = path.join(process.env.GITHUB_WORKSPACE, 'triage-report.md');
+          if (!fs.existsSync(reportPath)) {
+            core.info('No triage-report.md to post');
+            return;
+          }
+          const body = fs.readFileSync(reportPath, 'utf8');
+          const MARKER = '<!-- promptomate-report -->';
+          const payload = `${MARKER}\n${body}`;
+          const { data: comments } = await github.rest.issues.listComments({
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            issue_number: context.issue.number,
+            per_page: 100,
+          });
+          const existing = comments.find(c => c.body && c.body.includes(MARKER));
+          if (existing) {
+            await github.rest.issues.updateComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              comment_id: existing.id,
+              body: payload,
+            });
+          } else {
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              body: payload,
+            });
+          }
+
+    - name: Fail if any unrecovered failure
+      if: steps.run.outcome == 'failure'
+      shell: bash
+      run: |
+        echo "::error::Promptomate ci exited non-zero. See the PR comment or the uploaded triage-report artifact."
+        exit 1

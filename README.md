@@ -73,9 +73,66 @@ Run every saved test with auto-triage and write a markdown report (intended for 
 npm run dev -- ci --out triage-report.md
 ```
 
-## CI / GitHub Actions
+## Model selection + cost reporting
 
-`.github/workflows/promptomate.yml` runs on every PR:
+Default model is `claude-opus-4-7`. Every command accepts `-m, --model`:
+
+```bash
+npm run dev -- explore "..." --url ... --model sonnet  # claude-sonnet-4-6
+npm run dev -- triage my-test --apply --model haiku    # claude-haiku-4-5
+```
+
+Aliases: `opus` · `opus-4.6` · `sonnet` · `haiku`. Or pass a full model ID. `PROMPTOMATE_MODEL` env var is used when the flag is absent.
+
+Every command that calls the API prints a one-line cost summary at the end:
+
+```
+  3 API calls · 8,412 in + 1,203 out · $0.0720 · claude-opus-4-7 ×3
+```
+
+Cost calc factors in cache read/write pricing. Per-model totals appear when multiple models are used in one run.
+
+## Drop-in GitHub Action
+
+Other repos can consume this repo as a reusable action:
+
+```yaml
+# .github/workflows/promptomate.yml in YOUR repo
+name: Promptomate
+on: [pull_request]
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: guttaashok1/promptomate@main  # or pin to a tag: @v0.1.0
+        with:
+          anthropic-api-key: ${{ secrets.ANTHROPIC_API_KEY }}
+          # optional:
+          model: sonnet
+          max-attempts: "3"
+```
+
+Inputs: `anthropic-api-key` (required), `model`, `max-attempts`, `tests-dir`, `metadata-dir`.
+
+For `${VARNAME}` placeholders in your prompts (SAUCE_PASSWORD, etc.), set them as **job-level** env in your workflow — composite-action inputs don't propagate that way:
+
+```yaml
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    env:
+      SAUCE_PASSWORD: ${{ secrets.SAUCE_PASSWORD }}
+    steps:
+      ...
+```
+
+## CI / GitHub Actions (this repo)
+
+`.github/workflows/promptomate.yml` dogfoods the action on every PR:
 
 1. Installs dependencies + Chromium (cached).
 2. Runs `promptomate ci` — each saved test goes through auto-triage.
