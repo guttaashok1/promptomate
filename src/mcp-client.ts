@@ -24,10 +24,11 @@ export class PlaywrightMcpClient {
     this.client = new Client({ name: "promptomate", version: "0.1.0" });
   }
 
-  async connect(opts: { headless: boolean }): Promise<void> {
+  async connect(opts: { headless: boolean; storageState?: string }): Promise<void> {
     const binary = path.join(process.cwd(), "node_modules/.bin/playwright-mcp");
     const args: string[] = [];
     if (opts.headless) args.push("--headless");
+    if (opts.storageState) args.push("--storage-state", opts.storageState);
     this.transport = new StdioClientTransport({
       command: binary,
       args,

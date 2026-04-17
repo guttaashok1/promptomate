@@ -10,6 +10,14 @@ export interface TestMetadata {
   summary: string;
   createdAt: string;
   tags?: string[];
+  authFixture?: string;
+  usesAuth?: string;
+}
+
+export const AUTH_DIR = ".promptomate/auth";
+
+export function authStateFile(name: string): string {
+  return path.join(AUTH_DIR, `${name}.json`);
 }
 
 export function slugify(s: string): string {

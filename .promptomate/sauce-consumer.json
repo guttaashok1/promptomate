@@ -1,0 +1,8 @@
+{
+  "prompt": "add the Sauce Labs Backpack to the cart and verify the cart badge shows 1 item",
+  "url": "https://www.saucedemo.com/inventory.html",
+  "summary": "Adding the Sauce Labs Backpack from the inventory page updates the item to a Remove state and displays a cart badge with \"1\".",
+  "createdAt": "2026-04-17T16:25:12.593Z",
+  "tags": [],
+  "usesAuth": "sauce-user"
+}

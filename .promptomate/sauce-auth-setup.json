@@ -1,0 +1,8 @@
+{
+  "prompt": "log in as standard_user with password ${SAUCE_PASSWORD}",
+  "url": "https://www.saucedemo.com",
+  "summary": "Logs in to saucedemo.com as standard_user and saves the authenticated storage state to .promptomate/auth/sauce-user.json for reuse by other tests.",
+  "createdAt": "2026-04-17T16:23:55.505Z",
+  "tags": [],
+  "authFixture": "sauce-user"
+}

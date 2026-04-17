@@ -53,10 +53,15 @@ program
   .option("-n, --name <slug>", "Test name slug (defaults to derived from prompt)")
   .option("-m, --model <model>", "Model to use (opus | sonnet | haiku | full id)")
   .option("-t, --tag <tag>", "Tag to apply (repeatable)", collect, [])
+  .option("--auth <name>", "Mark this test as an auth fixture that saves session state")
+  .option("--use-auth <name>", "Consume a named auth fixture (browser starts authenticated)")
   .option("--no-run", "Only generate, don't execute")
-  .action(async (prompt: string, opts: { url: string; name?: string; model?: string; tag: string[]; run: boolean }) => {
+  .action(async (prompt: string, opts: { url: string; name?: string; model?: string; tag: string[]; auth?: string; useAuth?: string; run: boolean }) => {
     resetUsage();
-    const result = await generateTest({ prompt, url: opts.url, name: opts.name, model: opts.model, tags: opts.tag });
+    const result = await generateTest({
+      prompt, url: opts.url, name: opts.name, model: opts.model, tags: opts.tag,
+      authFixture: opts.auth, usesAuth: opts.useAuth,
+    });
     console.log(`\n✓ Generated ${result.path}`);
     console.log(`  Summary: ${result.summary}`);
     printUsage();
@@ -74,9 +79,11 @@ program
   .option("-n, --name <slug>", "Test name slug")
   .option("-m, --model <model>", "Model to use (opus | sonnet | haiku | full id)")
   .option("-t, --tag <tag>", "Tag to apply (repeatable)", collect, [])
+  .option("--auth <name>", "Mark this test as an auth fixture that saves session state")
+  .option("--use-auth <name>", "Consume a named auth fixture (browser starts authenticated)")
   .option("--headed", "Show the browser during exploration (useful for debugging)")
   .option("--no-run", "Only generate, don't execute the final spec")
-  .action(async (prompt: string, opts: { url: string; name?: string; model?: string; tag: string[]; headed: boolean; run: boolean }) => {
+  .action(async (prompt: string, opts: { url: string; name?: string; model?: string; tag: string[]; auth?: string; useAuth?: string; headed: boolean; run: boolean }) => {
     resetUsage();
     console.log(`Exploring ${opts.url} ...`);
     const result = await exploreAndGenerate({
@@ -86,6 +93,8 @@ program
       headless: !opts.headed,
       model: opts.model,
       tags: opts.tag,
+      authFixture: opts.auth,
+      usesAuth: opts.useAuth,
     });
     console.log(`\n✓ Generated ${result.path}`);
     console.log(`  Summary: ${result.summary}`);
@@ -257,6 +266,8 @@ program
       console.log(`    prompt:  ${t.prompt}`);
       console.log(`    url:     ${t.url}`);
       if (t.tags?.length) console.log(`    tags:    ${t.tags.join(", ")}`);
+      if (t.authFixture) console.log(`    auth:    produces fixture "${t.authFixture}"`);
+      if (t.usesAuth) console.log(`    auth:    uses fixture "${t.usesAuth}"`);
       console.log(`    summary: ${t.summary}\n`);
     }
   });

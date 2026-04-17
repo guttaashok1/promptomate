@@ -163,6 +163,38 @@ Set `ANTHROPIC_API_KEY` as a GitHub Actions secret. For private repos, `permissi
 
 **`triage --apply`** — auto-executes the verdict in a recovery loop: `dom_drift` → `heal` → re-run, `flake` → brief pause → re-run, `real_bug` → stop (exit code 2) because human attention is needed. Caps at 3 attempts. Exit code `0` if recovered, `1` if still failing, `2` if a real bug was diagnosed.
 
+## Auth fixtures (login once, reuse across tests)
+
+Full login flows are slow and flaky when repeated per-test. Playwright's `storageState` pattern solves this: log in once, save the browser session, reuse it.
+
+Produce a fixture:
+
+```bash
+npm run dev -- explore "log in as standard_user with password \${SAUCE_PASSWORD}" \
+  --url https://www.saucedemo.com \
+  --auth sauce-user \
+  --name sauce-auth-setup
+```
+
+The generated spec ends with `await page.context().storageState({ path: ".promptomate/auth/sauce-user.json" })`. Running that spec produces the session file (gitignored; contains cookies).
+
+Consume it from other tests:
+
+```bash
+npm run dev -- explore "add the backpack to cart and verify the badge shows 1" \
+  --url https://www.saucedemo.com/inventory.html \
+  --use-auth sauce-user \
+  --name cart-adds-badge
+```
+
+Key behaviors:
+- Playwright MCP is launched with `--storage-state ...` so the agent sees an **already-authenticated** page during exploration — it skips login steps entirely.
+- The generated spec gets `test.use({ storageState: ".promptomate/auth/sauce-user.json" });` right after the imports; Playwright applies it before every test.
+- `promptomate ci` runs auth-fixture tests **serially first**, then fans out the rest with `--concurrency`. The session file is fresh when dependents run.
+- `.promptomate/auth/` is gitignored — sessions never get committed.
+
+Rotate a fixture by re-running its setup spec — the file gets overwritten.
+
 ## Secrets
 
 Never paste passwords, API tokens, or session cookies into prompts — they'd end up in `.promptomate/*.json` (committed metadata). Use `${VARNAME}` placeholders instead:

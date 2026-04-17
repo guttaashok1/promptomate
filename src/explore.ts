@@ -9,7 +9,7 @@ import {
   scrubSecrets,
   substituteSecretsDeep,
 } from "./secrets.js";
-import { saveMetadata, slugify } from "./storage.js";
+import { AUTH_DIR, authStateFile, saveMetadata, slugify } from "./storage.js";
 import { resolveModel } from "./models.js";
 import { formatSummaryLine, recordUsage, resetUsage, summarize } from "./usage.js";
 
@@ -27,7 +27,24 @@ type ToolContent = string | Array<
   Anthropic.Messages.TextBlockParam | Anthropic.Messages.ImageBlockParam
 >;
 
-const SYSTEM_PROMPT = `You are a QA automation agent driving a real browser via the Playwright MCP server. Given a scenario and a starting URL, explore the live page until the scenario is proven end-to-end, then emit a standalone Playwright test.
+function buildSystemPrompt(ctx: { authFixture?: string; usesAuth?: string }): string {
+  const authBlock = ctx.authFixture
+    ? `\nAuth fixture (producing):
+- This test's job is to log in and SAVE the authenticated session so other tests can reuse it without logging in.
+- After the login flow succeeds, the final generated spec MUST end by calling:
+    await page.context().storageState({ path: "${authStateFile(ctx.authFixture)}" });
+- The harness has already ensured the parent directory exists.
+- Add a leading comment in the spec explaining this is an auth setup fixture for "${ctx.authFixture}".`
+    : ctx.usesAuth
+    ? `\nAuth fixture (consuming):
+- The browser session is ALREADY authenticated via the "${ctx.usesAuth}" fixture. DO NOT perform any login steps — skip navigating to a login page, skip filling credentials, skip clicking Sign in.
+- Start the test at the target URL and verify the authenticated state directly.
+- The generated spec MUST include this line right after the imports:
+    test.use({ storageState: "${authStateFile(ctx.usesAuth)}" });
+- This loads the saved cookies/localStorage automatically; Playwright applies it before every test.`
+    : "";
+
+  return `You are a QA automation agent driving a real browser via the Playwright MCP server. Given a scenario and a starting URL, explore the live page until the scenario is proven end-to-end, then emit a standalone Playwright test.
 
 Exploration rules:
 - Start with browser_navigate. Read the snapshot carefully before acting.
@@ -42,7 +59,7 @@ Secret handling:
 - The user's scenario may reference secrets as \${VARNAME} (e.g. \${SAUCE_PASSWORD}).
 - When you emit tool calls that fill fields with \${VARNAME}, keep the \${VARNAME} literal in your tool input — the harness substitutes the real value before dispatching to the browser.
 - In the final generated .spec.ts: NEVER hard-code secret values. For any \${VARNAME} the user referenced, use process.env.VARNAME ?? "" — the test harness loads .env, so process.env will be populated at runtime.
-
+${authBlock}
 Assertion guidance for the generated test:
 - The generated spec is standalone Playwright code — it does NOT use MCP. Refs are ephemeral; the final test uses regular Playwright locators.
 - Translate exploration locators into getByRole / getByText / getByLabel / getByPlaceholder using the role + accessible name from the snapshot.
@@ -60,6 +77,7 @@ When done, STOP calling tools and respond with exactly two XML blocks:
 </code>
 
 Do not wrap the code in markdown fences. Do not add commentary outside these two blocks.`;
+}
 
 export interface UsageSnapshot {
   calls: number;
@@ -83,9 +101,26 @@ export async function exploreAndGenerate(opts: {
   headless?: boolean;
   model?: string;
   tags?: string[];
+  authFixture?: string;
+  usesAuth?: string;
   onProgress?: (event: ProgressEvent) => void;
 }): Promise<{ name: string; path: string; summary: string }> {
   const model = resolveModel(opts.model);
+  let storageState: string | undefined;
+  if (opts.usesAuth) {
+    storageState = authStateFile(opts.usesAuth);
+    try {
+      await fs.access(storageState);
+    } catch {
+      throw new Error(
+        `Auth fixture "${opts.usesAuth}" not found at ${storageState}. ` +
+        `Run the auth fixture test first to produce it (e.g. 'promptomate run <auth-fixture-name>').`,
+      );
+    }
+  }
+  if (opts.authFixture) {
+    await fs.mkdir(AUTH_DIR, { recursive: true });
+  }
   const emit = (e: ProgressEvent) => opts.onProgress?.(e);
   resetUsage();
   emit({ type: "started", url: opts.url, prompt: opts.prompt });
@@ -97,7 +132,7 @@ export async function exploreAndGenerate(opts: {
   }
 
   const mcp = new PlaywrightMcpClient();
-  await mcp.connect({ headless: opts.headless ?? true });
+  await mcp.connect({ headless: opts.headless ?? true, storageState });
 
   try {
     const mcpTools = await mcp.listTools();
@@ -126,7 +161,7 @@ Begin by calling browser_navigate with the starting URL. Then explore until the 
         model,
         max_tokens: 16000,
         thinking: { type: "adaptive" },
-        system: SYSTEM_PROMPT,
+        system: buildSystemPrompt({ authFixture: opts.authFixture, usesAuth: opts.usesAuth }),
         tools,
         messages,
       });
@@ -187,6 +222,8 @@ Begin by calling browser_navigate with the starting URL. Then explore until the 
       summary,
       createdAt: new Date().toISOString(),
       tags: opts.tags,
+      authFixture: opts.authFixture,
+      usesAuth: opts.usesAuth,
     });
 
     const u = summarize();

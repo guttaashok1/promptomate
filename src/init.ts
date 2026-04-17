@@ -32,6 +32,7 @@ const GITIGNORE_ADDITIONS = [
   "blob-report/",
   "playwright/.cache/",
   ".playwright-mcp/",
+  ".promptomate/auth/",
   "triage-report.md",
 ];
 
@@ -62,7 +63,7 @@ export async function runInit(opts: { force?: boolean } = {}): Promise<InitResul
     created.push(f.label);
   }
 
-  for (const dir of ["tests", ".promptomate"]) {
+  for (const dir of ["tests", ".promptomate", ".promptomate/auth"]) {
     if (await exists(dir)) {
       skipped.push(`${dir}/`);
     } else {

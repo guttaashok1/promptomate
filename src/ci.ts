@@ -39,12 +39,32 @@ export async function runCi(
     };
   }
 
+  const authFixtures = tests
+    .map((t, idx) => ({ t, idx }))
+    .filter((e) => e.t.authFixture);
+  const others = tests
+    .map((t, idx) => ({ t, idx }))
+    .filter((e) => !e.t.authFixture);
+
   const results: TestRunResult[] = new Array(tests.length);
-  const queue = tests.map((t, idx) => ({ t, idx }));
-  const n = Math.max(1, Math.min(concurrency, tests.length));
-  if (n > 1) {
+
+  if (authFixtures.length > 0) {
     console.log(
-      `\nRunning ${tests.length} tests with concurrency ${n} (logs may interleave)`,
+      `\nRunning ${authFixtures.length} auth fixture${authFixtures.length > 1 ? "s" : ""} first (serial)`,
+    );
+    for (const { t, idx } of authFixtures) {
+      console.log(`\n========== [auth] ${t.name} ==========`);
+      const apply = await triageAndApply(t.name, maxAttempts, model);
+      const status = computeStatus(apply);
+      results[idx] = { name: t.name, status, apply };
+    }
+  }
+
+  const queue = [...others];
+  const n = Math.max(1, Math.min(concurrency, others.length || 1));
+  if (others.length > 0 && n > 1) {
+    console.log(
+      `\nRunning ${others.length} remaining tests with concurrency ${n} (logs may interleave)`,
     );
   }
 
@@ -59,7 +79,9 @@ export async function runCi(
       results[idx] = { name: t.name, status, apply };
     }
   };
-  await Promise.all(Array.from({ length: n }, () => worker()));
+  if (others.length > 0) {
+    await Promise.all(Array.from({ length: n }, () => worker()));
+  }
 
   return formatReport(results);
 }

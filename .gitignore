@@ -6,6 +6,7 @@ playwright-report/
 blob-report/
 playwright/.cache/
 .playwright-mcp/
+.promptomate/auth/
 triage-report.md
 .DS_Store
 *.log

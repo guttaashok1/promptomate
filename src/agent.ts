@@ -2,10 +2,21 @@ import Anthropic from "@anthropic-ai/sdk";
 import { chromium } from "@playwright/test";
 import fs from "fs/promises";
 import path from "path";
-import { saveMetadata, slugify } from "./storage.js";
+import { AUTH_DIR, authStateFile, saveMetadata, slugify } from "./storage.js";
 import { callModel } from "./llm.js";
 
-const SYSTEM_PROMPT = `You generate Playwright tests in TypeScript.
+function buildSystemPrompt(ctx: { authFixture?: string; usesAuth?: string }): string {
+  const authBlock = ctx.authFixture
+    ? `\nAuth fixture (producing):
+- This test's job is to log in and SAVE the authenticated session.
+- End the test body by calling: await page.context().storageState({ path: "${authStateFile(ctx.authFixture)}" });`
+    : ctx.usesAuth
+    ? `\nAuth fixture (consuming):
+- The browser is already authenticated via the "${ctx.usesAuth}" fixture — DO NOT include login steps.
+- Immediately after the imports, include: test.use({ storageState: "${authStateFile(ctx.usesAuth)}" });`
+    : "";
+
+  return `You generate Playwright tests in TypeScript.
 
 Rules:
 - Import from "@playwright/test": test, expect
@@ -19,12 +30,13 @@ Rules:
 Secret handling:
 - If the user's scenario references secrets as \${VARNAME} (e.g. \${SAUCE_PASSWORD}), use process.env.VARNAME ?? "" in the generated code — NEVER hard-code the value.
 - The test harness loads .env at runtime, so process.env will be populated.
-
+${authBlock}
 Response format — respond with exactly two XML blocks, nothing else:
 <summary>One-sentence summary of what the test verifies.</summary>
 <code>
 // complete TypeScript spec file contents here, no markdown fences
 </code>`;
+}
 
 export async function generateTest(opts: {
   prompt: string;
@@ -32,7 +44,22 @@ export async function generateTest(opts: {
   name?: string;
   model?: string;
   tags?: string[];
+  authFixture?: string;
+  usesAuth?: string;
 }): Promise<{ name: string; path: string; summary: string }> {
+  if (opts.authFixture) {
+    await fs.mkdir(AUTH_DIR, { recursive: true });
+  }
+  if (opts.usesAuth) {
+    try {
+      await fs.access(authStateFile(opts.usesAuth));
+    } catch {
+      throw new Error(
+        `Auth fixture "${opts.usesAuth}" not found at ${authStateFile(opts.usesAuth)}. ` +
+        `Run the producing test first.`,
+      );
+    }
+  }
   const { snapshot, title } = await capturePage(opts.url);
 
   const userPrompt = `Generate a Playwright test for this scenario:
@@ -45,7 +72,8 @@ Page title: ${title}
 ARIA snapshot of the landing page (use this to choose locators):
 ${truncate(snapshot, 12000)}`;
 
-  const raw = await callModel({ system: SYSTEM_PROMPT, user: userPrompt, model: opts.model });
+  const system = buildSystemPrompt({ authFixture: opts.authFixture, usesAuth: opts.usesAuth });
+  const raw = await callModel({ system, user: userPrompt, model: opts.model });
   const { summary, code } = parseResponse(raw);
 
   const slug = opts.name ?? slugify(opts.prompt);
@@ -58,6 +86,8 @@ ${truncate(snapshot, 12000)}`;
     summary,
     createdAt: new Date().toISOString(),
     tags: opts.tags,
+    authFixture: opts.authFixture,
+    usesAuth: opts.usesAuth,
   });
 
   return { name: slug, path: filePath, summary };
