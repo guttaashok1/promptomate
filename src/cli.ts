@@ -1,0 +1,82 @@
+#!/usr/bin/env node
+import { Command } from "commander";
+import dotenv from "dotenv";
+import { generateTest } from "./agent.js";
+import { runTest } from "./runner.js";
+import { listTests, readSpec, readMetadata } from "./storage.js";
+import { healTest } from "./heal.js";
+
+dotenv.config();
+
+const program = new Command();
+
+program
+  .name("promptomate")
+  .description("Prompt-driven Playwright test generation")
+  .version("0.1.0");
+
+program
+  .command("gen")
+  .description("Generate a Playwright test from a natural-language prompt and run it")
+  .argument("<prompt>", "What to test, e.g. 'login with valid creds redirects to dashboard'")
+  .requiredOption("-u, --url <url>", "Target URL")
+  .option("-n, --name <slug>", "Test name slug (defaults to derived from prompt)")
+  .option("--no-run", "Only generate, don't execute")
+  .action(async (prompt: string, opts: { url: string; name?: string; run: boolean }) => {
+    const result = await generateTest({ prompt, url: opts.url, name: opts.name });
+    console.log(`\n✓ Generated ${result.path}`);
+    console.log(`  Summary: ${result.summary}\n`);
+    if (opts.run !== false) {
+      const run = await runTest(result.path);
+      process.exit(run.exitCode);
+    }
+  });
+
+program
+  .command("run")
+  .description("Run a saved test")
+  .argument("<name>", "Test name")
+  .action(async (name: string) => {
+    const run = await runTest(`tests/${name}.spec.ts`);
+    process.exit(run.exitCode);
+  });
+
+program
+  .command("heal")
+  .description("Re-generate a failing test against the current DOM")
+  .argument("<name>", "Test name")
+  .action(async (name: string) => {
+    const metadata = await readMetadata(name);
+    if (!metadata) {
+      console.error(`No saved test "${name}". Run \`promptomate list\` to see saved tests.`);
+      process.exit(1);
+    }
+    const oldCode = await readSpec(name);
+    const result = await healTest({ name, metadata, oldCode });
+    console.log(`\n✓ Healed ${result.path}`);
+    console.log(`  Changes: ${result.summary}\n`);
+    const run = await runTest(result.path);
+    process.exit(run.exitCode);
+  });
+
+program
+  .command("list")
+  .description("List all saved tests")
+  .action(async () => {
+    const tests = await listTests();
+    if (tests.length === 0) {
+      console.log("No tests yet. Run `promptomate gen` to create one.");
+      return;
+    }
+    for (const t of tests) {
+      console.log(`  ${t.name}`);
+      console.log(`    prompt:  ${t.prompt}`);
+      console.log(`    url:     ${t.url}`);
+      console.log(`    summary: ${t.summary}\n`);
+    }
+  });
+
+program.parseAsync().catch((err) => {
+  console.error(err);
+  process.exit(1);
+});
