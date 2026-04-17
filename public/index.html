@@ -213,6 +213,7 @@
           <td class="actions">
             <button class="secondary" data-action="run">Run</button>
             <button class="secondary" data-action="triage">Triage</button>
+            <button class="secondary" data-action="refine">Refine</button>
             <button class="secondary" data-action="view">View</button>
           </td>
         </tr>
@@ -264,6 +265,21 @@
           const res = await fetch(`/api/test/${encodeURIComponent(name)}`);
           const data = await res.json();
           showGenerated(data.metadata.summary, data.code, name);
+        } else if (action === "refine") {
+          const instruction = window.prompt(`Refine "${name}" — what should change?\n\nExamples:\n  • also verify the cart badge shows 1\n  • remove the menu button assertion\n  • wait for the toast to appear after clicking Save`);
+          if (!instruction) return;
+          badge.textContent = "refining";
+          badge.className = "status-badge running";
+          const res = await fetch(`/api/refine/${encodeURIComponent(name)}`, {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ instruction }),
+          });
+          const data = await res.json();
+          if (!res.ok) throw new Error(data.error || "refine failed");
+          badge.textContent = "refined";
+          badge.className = "status-badge drift";
+          showGenerated(data.summary, data.code, name);
         }
       } catch (err) {
         showResult({ summary: "Error", log: err.message });

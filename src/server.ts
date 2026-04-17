@@ -5,6 +5,7 @@ import fs from "fs/promises";
 import path from "path";
 import { fileURLToPath } from "url";
 import { exploreAndGenerate, type ProgressEvent } from "./explore.js";
+import { refineTest } from "./refine.js";
 import { listTests, readMetadata, readSpec } from "./storage.js";
 import { triage, triageAndApply } from "./triage.js";
 
@@ -119,6 +120,23 @@ export function startServer(port: number): void {
     }
     const result = await runPlaywright(specPath);
     res.json(result);
+  });
+
+  app.post("/api/refine/:name", async (req: Request, res: Response) => {
+    const { instruction } = req.body as { instruction?: string };
+    if (!instruction) {
+      return res.status(400).json({ error: "instruction required" });
+    }
+    try {
+      const result = await refineTest({
+        name: String(req.params.name),
+        instruction,
+      });
+      const code = await readSpec(String(req.params.name));
+      res.json({ ...result, code });
+    } catch (e) {
+      res.status(500).json({ error: (e as Error).message });
+    }
   });
 
   app.post("/api/triage/:name", async (req: Request, res: Response) => {

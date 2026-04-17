@@ -7,6 +7,7 @@ import { exploreAndGenerate } from "./explore.js";
 import { runTest } from "./runner.js";
 import { listTests, readSpec, readMetadata } from "./storage.js";
 import { healTest } from "./heal.js";
+import { refineTest } from "./refine.js";
 import { runCi } from "./ci.js";
 import { startServer } from "./server.js";
 import { triage, triageAndApply } from "./triage.js";
@@ -85,6 +86,22 @@ program
     console.log(`  Changes: ${result.summary}\n`);
     const run = await runTest(result.path);
     process.exit(run.exitCode);
+  });
+
+program
+  .command("refine")
+  .description("Tweak an existing test with a natural-language instruction")
+  .argument("<name>", "Test name")
+  .argument("<instruction>", "What to change, e.g. 'also check the cart badge shows 1'")
+  .option("--no-run", "Only refine, don't execute the updated spec")
+  .action(async (name: string, instruction: string, opts: { run: boolean }) => {
+    const result = await refineTest({ name, instruction });
+    console.log(`\n✓ Refined ${result.path}`);
+    console.log(`  Changes: ${result.summary}\n`);
+    if (opts.run !== false) {
+      const run = await runTest(result.path);
+      process.exit(run.exitCode);
+    }
   });
 
 program

@@ -47,6 +47,13 @@ Heal a broken test after DOM drift:
 npm run dev -- heal <name>
 ```
 
+Refine an existing test with a natural-language instruction:
+
+```bash
+npm run dev -- refine <name> "also verify the cart badge shows 1"
+npm run dev -- refine <name> "remove the menu button assertion"
+```
+
 Triage a failure — classify as real bug / flake / DOM drift and suggest a fix:
 
 ```bash
@@ -92,6 +99,8 @@ Set `ANTHROPIC_API_KEY` as a GitHub Actions secret. For private repos, `permissi
 4. When done, Claude emits a standalone `.spec.ts` using regular Playwright locators (`getByRole` / `getByText`) — the spec does NOT depend on MCP at runtime.
 
 **`heal`** — on a locator failure, re-snapshots the page and regenerates the test with the latest DOM + prior failure context.
+
+**`refine`** — iterate on a test without hand-editing the TypeScript. Takes an existing spec + a natural-language modification instruction + a fresh ARIA snapshot, and emits a surgical update. Use when you want to add an assertion, remove a check, adjust a wait, or change test data. Keeps the existing structure unless the instruction says otherwise.
 
 **`triage`** — re-runs a failing test, captures the error output + a fresh ARIA snapshot + a screenshot of the current page, sends all of it to Claude, and gets back a verdict (`real_bug` / `flake` / `dom_drift`) with confidence and a concrete next action. Use when you don't know whether to `heal`, re-run, or file a bug.
 

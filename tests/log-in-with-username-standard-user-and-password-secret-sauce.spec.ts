@@ -11,4 +11,9 @@ test("standard_user can log in and see products page", async ({ page }) => {
   await expect(page.getByText("Products", { exact: true })).toBeVisible();
   await expect(page.getByRole("button", { name: "Open Menu" })).toBeVisible();
   await expect(page.getByText("Sauce Labs Backpack").first()).toBeVisible();
+
+  // Shopping cart icon is visible in the top right, with no badge count
+  const cartLink = page.locator('[data-test="shopping-cart-link"]');
+  await expect(cartLink).toBeVisible();
+  await expect(page.locator('[data-test="shopping-cart-badge"]')).toHaveCount(0);
 });
