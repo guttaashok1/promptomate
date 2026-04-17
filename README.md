@@ -106,6 +106,26 @@ Set `ANTHROPIC_API_KEY` as a GitHub Actions secret. For private repos, `permissi
 
 **`triage --apply`** — auto-executes the verdict in a recovery loop: `dom_drift` → `heal` → re-run, `flake` → brief pause → re-run, `real_bug` → stop (exit code 2) because human attention is needed. Caps at 3 attempts. Exit code `0` if recovered, `1` if still failing, `2` if a real bug was diagnosed.
 
+## Secrets
+
+Never paste passwords, API tokens, or session cookies into prompts — they'd end up in `.promptomate/*.json` (committed metadata). Use `${VARNAME}` placeholders instead:
+
+```bash
+# in .env (gitignored)
+SAUCE_PASSWORD=secret_sauce
+
+# then
+npm run dev -- explore "log in as standard_user with password \${SAUCE_PASSWORD}" --url https://www.saucedemo.com
+```
+
+How it works:
+- Promptomate extracts `${VARNAME}` tokens from your prompt and resolves them against `process.env` (errors cleanly if unset).
+- During `explore`: when the agent calls `browser_fill_form` or similar with `${VARNAME}`, the harness substitutes the real value before dispatching to the browser. Any tool result text gets scrubbed back to `${VARNAME}` so the value doesn't round-trip through the model unnecessarily.
+- The generated `.spec.ts` uses `process.env.VARNAME ?? ""` — never the literal value. Playwright's config loads `.env`, so runs just work.
+- Saved metadata stores the placeholder template (`"log in with password ${SAUCE_PASSWORD}"`), safe to commit.
+
+Shell escape `\${...}` so your shell doesn't expand it before Promptomate sees it, or wrap the whole prompt in single quotes.
+
 ## Visual assertions
 
 DOM-based assertions are fast and free but can't judge things like "looks like an error state" or "the chart shows a downward trend." For those, generated specs can import a Claude-vision-powered helper:

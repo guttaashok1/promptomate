@@ -16,6 +16,10 @@ Rules:
 - Wait on user-observable state, not arbitrary timeouts
 - Output exactly one test() block in a complete .spec.ts file
 
+Secret handling:
+- If the user's scenario references secrets as \${VARNAME} (e.g. \${SAUCE_PASSWORD}), use process.env.VARNAME ?? "" in the generated code — NEVER hard-code the value.
+- The test harness loads .env at runtime, so process.env will be populated.
+
 Response format — respond with exactly two XML blocks, nothing else:
 <summary>One-sentence summary of what the test verifies.</summary>
 <code>

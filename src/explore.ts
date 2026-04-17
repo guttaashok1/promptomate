@@ -3,6 +3,12 @@ import fs from "fs/promises";
 import path from "path";
 import { parseResponse } from "./agent.js";
 import { PlaywrightMcpClient, type McpContentBlock } from "./mcp-client.js";
+import {
+  extractSecretNames,
+  resolveSecrets,
+  scrubSecrets,
+  substituteSecretsDeep,
+} from "./secrets.js";
 import { saveMetadata, slugify } from "./storage.js";
 
 const MODEL = process.env.PROMPTOMATE_MODEL ?? "claude-opus-4-7";
@@ -30,6 +36,11 @@ Exploration rules:
 - Use browser_take_screenshot when visual-only content matters or the snapshot is ambiguous.
 - Use browser_console_messages and browser_network_requests when you need to assert on JS errors, API calls, or status codes.
 - Keep exploration minimal. Usually 5–12 tool calls is enough. Stop once the scenario is confirmed.
+
+Secret handling:
+- The user's scenario may reference secrets as \${VARNAME} (e.g. \${SAUCE_PASSWORD}).
+- When you emit tool calls that fill fields with \${VARNAME}, keep the \${VARNAME} literal in your tool input — the harness substitutes the real value before dispatching to the browser.
+- In the final generated .spec.ts: NEVER hard-code secret values. For any \${VARNAME} the user referenced, use process.env.VARNAME ?? "" — the test harness loads .env, so process.env will be populated at runtime.
 
 Assertion guidance for the generated test:
 - The generated spec is standalone Playwright code — it does NOT use MCP. Refs are ephemeral; the final test uses regular Playwright locators.
@@ -65,6 +76,9 @@ export async function exploreAndGenerate(opts: {
 }): Promise<{ name: string; path: string; summary: string }> {
   const emit = (e: ProgressEvent) => opts.onProgress?.(e);
   emit({ type: "started", url: opts.url, prompt: opts.prompt });
+
+  const secretNames = extractSecretNames(opts.prompt);
+  const secrets = secretNames.length ? resolveSecrets(secretNames) : {};
   if (!process.env.ANTHROPIC_API_KEY) {
     throw new Error("ANTHROPIC_API_KEY is not set. Add it to .env.");
   }
@@ -119,17 +133,18 @@ Begin by calling browser_navigate with the starting URL. Then explore until the 
       const results: Anthropic.Messages.ToolResultBlockParam[] = [];
       for (const call of toolUses) {
         const preview = previewInput(call.input);
+        const resolvedInput = substituteSecretsDeep(
+          call.input as Record<string, unknown>,
+          secrets,
+        );
         try {
-          const mcpResult = await mcp.callTool(
-            call.name,
-            call.input as Record<string, unknown>,
-          );
+          const mcpResult = await mcp.callTool(call.name, resolvedInput);
           console.log(`  → ${call.name}(${preview}) ${mcpResult.isError ? "✗" : "✓"}`);
           emit({ type: "tool_call", name: call.name, input: call.input, ok: !mcpResult.isError });
           results.push({
             type: "tool_result",
             tool_use_id: call.id,
-            content: translateMcpContent(mcpResult.content),
+            content: translateMcpContent(mcpResult.content, secrets),
             is_error: mcpResult.isError,
           });
         } catch (e) {
@@ -169,13 +184,18 @@ Begin by calling browser_navigate with the starting URL. Then explore until the 
   }
 }
 
-function translateMcpContent(content: McpContentBlock[]): ToolContent {
+function translateMcpContent(
+  content: McpContentBlock[],
+  secrets: Record<string, string> = {},
+): ToolContent {
   const blocks: Array<
     Anthropic.Messages.TextBlockParam | Anthropic.Messages.ImageBlockParam
   > = [];
+  const hasSecrets = Object.keys(secrets).length > 0;
   for (const item of content) {
     if (item.type === "text" && typeof item.text === "string") {
-      blocks.push({ type: "text", text: truncate(item.text, 8000) });
+      const clean = hasSecrets ? scrubSecrets(item.text, secrets) : item.text;
+      blocks.push({ type: "text", text: truncate(clean, 8000) });
     } else if (item.type === "image" && typeof item.data === "string") {
       const mediaType = (item.mimeType ?? "image/png") as
         | "image/png"

@@ -19,6 +19,7 @@ Rules:
 - Prefer semantic locators (getByRole, getByText, getByLabel) — never CSS selectors
 - If the instruction can't be satisfied from the given page state (e.g. it references an element that doesn't exist), note that in the summary and make the smallest reasonable change
 - Preserve all existing imports; add new imports only when necessary
+- Secrets: if the instruction or the original scenario references \${VARNAME}, use process.env.VARNAME ?? "" in the code — NEVER hard-code the value. The harness loads .env at runtime.
 
 Response format — respond with exactly two XML blocks, nothing else:
 <summary>One-sentence summary of what changed (and any caveats).</summary>
