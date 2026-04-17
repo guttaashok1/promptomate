@@ -29,6 +29,10 @@ export function startServer(port: number): void {
   const app = express();
   app.use(express.json({ limit: "2mb" }));
 
+  app.get("/health", (_req, res) => {
+    res.json({ ok: true });
+  });
+
   const authToken = process.env.PROMPTOMATE_AUTH_TOKEN;
   if (authToken) {
     app.use((req, res, next) => {
