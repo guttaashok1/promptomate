@@ -7,7 +7,7 @@ import { exploreAndGenerate } from "./explore.js";
 import { runTest } from "./runner.js";
 import { listTests, readSpec, readMetadata } from "./storage.js";
 import { healTest } from "./heal.js";
-import { triage } from "./triage.js";
+import { triage, triageAndApply } from "./triage.js";
 
 const program = new Command();
 
@@ -88,7 +88,29 @@ program
   .command("triage")
   .description("Re-run a test, classify any failure (real bug / flake / dom drift), and suggest a fix")
   .argument("<name>", "Test name")
-  .action(async (name: string) => {
+  .option("--apply", "Auto-apply the suggestion (heal on drift, retry on flake, stop on real bug)")
+  .option("--max-attempts <n>", "Max attempts when --apply is set (default 3)", "3")
+  .action(async (name: string, opts: { apply?: boolean; maxAttempts: string }) => {
+    if (opts.apply) {
+      const max = Math.max(1, parseInt(opts.maxAttempts, 10) || 3);
+      const result = await triageAndApply(name, max);
+      console.log("\n━━━━━━━━━━━━ Summary ━━━━━━━━━━━━");
+      console.log(`  Status:  ${result.finalStatus}`);
+      if (result.finalVerdict) {
+        console.log(`  Verdict: ${result.finalVerdict}`);
+      }
+      console.log(`  Attempts: ${result.attempts.length}`);
+      for (const [i, a] of result.attempts.entries()) {
+        const verdict = a.triage.verdict ?? "(parse failed)";
+        const detail = a.action === "heal" ? ` → heal: ${a.healSummary}` : ` → ${a.action}`;
+        console.log(`    ${i + 1}. ${verdict}${detail}`);
+      }
+      console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n");
+      if (result.finalStatus === "passed") {
+        process.exit(0);
+      }
+      process.exit(result.finalVerdict === "real_bug" ? 2 : 1);
+    }
     const result = await triage(name);
     if (result.passed) {
       console.log("\n✓ Test passed. Nothing to triage.");

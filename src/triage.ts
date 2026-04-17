@@ -1,6 +1,7 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { chromium } from "@playwright/test";
 import { spawn } from "child_process";
+import { healTest } from "./heal.js";
 import { readMetadata, readSpec, type TestMetadata } from "./storage.js";
 
 const MODEL = process.env.PROMPTOMATE_MODEL ?? "claude-opus-4-7";
@@ -15,6 +16,20 @@ export interface TriageResult {
   reason?: string;
   suggestion?: string;
   rawOutput: string;
+}
+
+export type ActionTaken = "heal" | "retry" | "none";
+
+export interface Attempt {
+  triage: TriageResult;
+  action: ActionTaken;
+  healSummary?: string;
+}
+
+export interface ApplyResult {
+  finalStatus: "passed" | "failed";
+  finalVerdict?: Verdict;
+  attempts: Attempt[];
 }
 
 const SYSTEM_PROMPT = `You are a senior QA engineer triaging a Playwright test failure.
@@ -67,6 +82,65 @@ export async function triage(name: string): Promise<TriageResult> {
   });
 
   return { passed: false, rawOutput: run.output, ...classification };
+}
+
+export async function triageAndApply(
+  name: string,
+  maxAttempts = 3,
+): Promise<ApplyResult> {
+  const attempts: Attempt[] = [];
+
+  for (let i = 0; i < maxAttempts; i++) {
+    console.log(`\n━━━━━━━━━━━ Attempt ${i + 1}/${maxAttempts} ━━━━━━━━━━━`);
+    const result = await triage(name);
+
+    if (result.passed) {
+      return { finalStatus: "passed", attempts };
+    }
+
+    console.log(`  Verdict:    ${result.verdict ?? "(parse failed)"}`);
+    console.log(`  Confidence: ${result.confidence ?? "(parse failed)"}`);
+    console.log(`  Reason:     ${result.reason ?? "(parse failed)"}`);
+
+    if (result.verdict === "real_bug") {
+      console.log(`  Action:     none — real bug, manual attention needed`);
+      attempts.push({ triage: result, action: "none" });
+      return { finalStatus: "failed", finalVerdict: "real_bug", attempts };
+    }
+
+    if (result.verdict === "dom_drift") {
+      console.log(`  Action:     healing locators ...`);
+      const metadata = await readMetadata(name);
+      const oldCode = await readSpec(name);
+      if (!metadata) {
+        console.log(`  (no metadata for ${name}, can't heal)`);
+        attempts.push({ triage: result, action: "none" });
+        return { finalStatus: "failed", finalVerdict: result.verdict, attempts };
+      }
+      const healed = await healTest({ name, metadata, oldCode });
+      console.log(`  Healed:     ${healed.summary}`);
+      attempts.push({ triage: result, action: "heal", healSummary: healed.summary });
+      continue;
+    }
+
+    if (result.verdict === "flake") {
+      console.log(`  Action:     retry (brief pause)`);
+      await new Promise((r) => setTimeout(r, 2000));
+      attempts.push({ triage: result, action: "retry" });
+      continue;
+    }
+
+    // verdict couldn't be parsed
+    console.log(`  Action:     stopping — could not classify`);
+    attempts.push({ triage: result, action: "none" });
+    return { finalStatus: "failed", attempts };
+  }
+
+  return {
+    finalStatus: "failed",
+    finalVerdict: attempts.at(-1)?.triage.verdict,
+    attempts,
+  };
 }
 
 function runTestCapture(specPath: string): Promise<{ passed: boolean; output: string }> {

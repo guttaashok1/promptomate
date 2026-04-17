@@ -53,6 +53,13 @@ Triage a failure — classify as real bug / flake / DOM drift and suggest a fix:
 npm run dev -- triage <name>
 ```
 
+Auto-apply the triage suggestion (heal on drift, retry on flake, stop on real bug):
+
+```bash
+npm run dev -- triage <name> --apply
+# caps at 3 attempts by default; override with --max-attempts <n>
+```
+
 ## How it works
 
 **`gen`** — one-shot:
@@ -69,6 +76,8 @@ npm run dev -- triage <name>
 **`heal`** — on a locator failure, re-snapshots the page and regenerates the test with the latest DOM + prior failure context.
 
 **`triage`** — re-runs a failing test, captures the error output + a fresh ARIA snapshot + a screenshot of the current page, sends all of it to Claude, and gets back a verdict (`real_bug` / `flake` / `dom_drift`) with confidence and a concrete next action. Use when you don't know whether to `heal`, re-run, or file a bug.
+
+**`triage --apply`** — auto-executes the verdict in a recovery loop: `dom_drift` → `heal` → re-run, `flake` → brief pause → re-run, `real_bug` → stop (exit code 2) because human attention is needed. Caps at 3 attempts. Exit code `0` if recovered, `1` if still failing, `2` if a real bug was diagnosed.
 
 ## Visual assertions
 
