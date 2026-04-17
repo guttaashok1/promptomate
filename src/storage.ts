@@ -9,6 +9,7 @@ export interface TestMetadata {
   url: string;
   summary: string;
   createdAt: string;
+  tags?: string[];
 }
 
 export function slugify(s: string): string {

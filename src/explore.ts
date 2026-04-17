@@ -74,6 +74,7 @@ export async function exploreAndGenerate(opts: {
   name?: string;
   headless?: boolean;
   model?: string;
+  tags?: string[];
   onProgress?: (event: ProgressEvent) => void;
 }): Promise<{ name: string; path: string; summary: string }> {
   const model = resolveModel(opts.model);
@@ -176,6 +177,7 @@ Begin by calling browser_navigate with the starting URL. Then explore until the 
       url: opts.url,
       summary,
       createdAt: new Date().toISOString(),
+      tags: opts.tags,
     });
 
     emit({ type: "done", name: slug, path: filePath, summary, code });

@@ -31,6 +31,7 @@ export async function generateTest(opts: {
   url: string;
   name?: string;
   model?: string;
+  tags?: string[];
 }): Promise<{ name: string; path: string; summary: string }> {
   const { snapshot, title } = await capturePage(opts.url);
 
@@ -56,6 +57,7 @@ ${truncate(snapshot, 12000)}`;
     url: opts.url,
     summary,
     createdAt: new Date().toISOString(),
+    tags: opts.tags,
   });
 
   return { name: slug, path: filePath, summary };

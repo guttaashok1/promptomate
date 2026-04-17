@@ -8,6 +8,7 @@ import { runTest } from "./runner.js";
 import { listTests, readSpec, readMetadata } from "./storage.js";
 import { healTest } from "./heal.js";
 import { refineTest } from "./refine.js";
+import { runInit } from "./init.js";
 import { runCi } from "./ci.js";
 import { startServer } from "./server.js";
 import { triage, triageAndApply } from "./triage.js";
@@ -20,6 +21,10 @@ function printUsage(): void {
   console.log(`\n  ${formatSummaryLine(s)}`);
 }
 
+function collect(value: string, prev: string[]): string[] {
+  return [...prev, value];
+}
+
 const program = new Command();
 
 program
@@ -28,16 +33,30 @@ program
   .version("0.1.0");
 
 program
+  .command("init")
+  .description("Scaffold .env, tests/, .promptomate/, and playwright.config.ts in the current directory")
+  .option("--force", "Overwrite existing files")
+  .action(async (opts: { force?: boolean }) => {
+    const result = await runInit({ force: opts.force });
+    console.log("\npromptomate init:");
+    for (const c of result.created) console.log(`  ✓ created ${c}`);
+    for (const s of result.skipped) console.log(`  · skipped ${s}`);
+    console.log("\nNext: open .env and set ANTHROPIC_API_KEY, then try:");
+    console.log("  promptomate explore \"log in and see dashboard\" --url https://example.com\n");
+  });
+
+program
   .command("gen")
   .description("Generate a Playwright test from a natural-language prompt and run it")
   .argument("<prompt>", "What to test, e.g. 'login with valid creds redirects to dashboard'")
   .requiredOption("-u, --url <url>", "Target URL")
   .option("-n, --name <slug>", "Test name slug (defaults to derived from prompt)")
   .option("-m, --model <model>", "Model to use (opus | sonnet | haiku | full id)")
+  .option("-t, --tag <tag>", "Tag to apply (repeatable)", collect, [])
   .option("--no-run", "Only generate, don't execute")
-  .action(async (prompt: string, opts: { url: string; name?: string; model?: string; run: boolean }) => {
+  .action(async (prompt: string, opts: { url: string; name?: string; model?: string; tag: string[]; run: boolean }) => {
     resetUsage();
-    const result = await generateTest({ prompt, url: opts.url, name: opts.name, model: opts.model });
+    const result = await generateTest({ prompt, url: opts.url, name: opts.name, model: opts.model, tags: opts.tag });
     console.log(`\n✓ Generated ${result.path}`);
     console.log(`  Summary: ${result.summary}`);
     printUsage();
@@ -54,9 +73,10 @@ program
   .requiredOption("-u, --url <url>", "Starting URL")
   .option("-n, --name <slug>", "Test name slug")
   .option("-m, --model <model>", "Model to use (opus | sonnet | haiku | full id)")
+  .option("-t, --tag <tag>", "Tag to apply (repeatable)", collect, [])
   .option("--headed", "Show the browser during exploration (useful for debugging)")
   .option("--no-run", "Only generate, don't execute the final spec")
-  .action(async (prompt: string, opts: { url: string; name?: string; model?: string; headed: boolean; run: boolean }) => {
+  .action(async (prompt: string, opts: { url: string; name?: string; model?: string; tag: string[]; headed: boolean; run: boolean }) => {
     resetUsage();
     console.log(`Exploring ${opts.url} ...`);
     const result = await exploreAndGenerate({
@@ -65,6 +85,7 @@ program
       name: opts.name,
       headless: !opts.headed,
       model: opts.model,
+      tags: opts.tag,
     });
     console.log(`\n✓ Generated ${result.path}`);
     console.log(`  Summary: ${result.summary}`);
@@ -176,10 +197,25 @@ program
   .option("-o, --out <path>", "Write the markdown report to this path", "triage-report.md")
   .option("--max-attempts <n>", "Max recovery attempts per failing test", "3")
   .option("-m, --model <model>", "Model to use (opus | sonnet | haiku | full id)")
-  .action(async (opts: { out: string; maxAttempts: string; model?: string }) => {
+  .option("-t, --tag <tag>", "Only run tests with this tag (repeatable)", collect, [])
+  .option("--changed", "Only run tests whose spec or metadata has changed since <base>")
+  .option("--base <ref>", "Base ref for --changed (default: origin/<PR base> or HEAD^)")
+  .action(async (opts: { out: string; maxAttempts: string; model?: string; tag: string[]; changed?: boolean; base?: string }) => {
     resetUsage();
     const max = Math.max(1, parseInt(opts.maxAttempts, 10) || 3);
-    const { report, exitCode } = await runCi(max, opts.model);
+    let onlyNames: string[] | undefined;
+    if (opts.changed) {
+      const { changedFiles, defaultBaseRef, testsAffectedByDiff } = await import("./git-diff.js");
+      const all = await listTests();
+      const base = opts.base ?? defaultBaseRef();
+      const files = await changedFiles(base);
+      onlyNames = testsAffectedByDiff(all, files);
+      console.log(`--changed: base=${base}, ${files.length} files changed, ${onlyNames.length} tests affected`);
+    }
+    const { report, exitCode } = await runCi(max, opts.model, {
+      tags: opts.tag.length ? opts.tag : undefined,
+      onlyNames,
+    });
     await fs.writeFile(opts.out, report);
     console.log(`\nReport written to ${opts.out}`);
     console.log(report);
@@ -199,16 +235,21 @@ program
 program
   .command("list")
   .description("List all saved tests")
-  .action(async () => {
-    const tests = await listTests();
+  .option("-t, --tag <tag>", "Only list tests with this tag (repeatable)", collect, [])
+  .action(async (opts: { tag: string[] }) => {
+    let tests = await listTests();
+    if (opts.tag.length) {
+      tests = tests.filter((t) => (t.tags ?? []).some((tag) => opts.tag.includes(tag)));
+    }
     if (tests.length === 0) {
-      console.log("No tests yet. Run `promptomate gen` to create one.");
+      console.log("No tests match. Run `promptomate gen` to create one.");
       return;
     }
     for (const t of tests) {
       console.log(`  ${t.name}`);
       console.log(`    prompt:  ${t.prompt}`);
       console.log(`    url:     ${t.url}`);
+      if (t.tags?.length) console.log(`    tags:    ${t.tags.join(", ")}`);
       console.log(`    summary: ${t.summary}\n`);
     }
   });

@@ -15,11 +15,24 @@ export interface CiResult {
   results: TestRunResult[];
 }
 
-export async function runCi(maxAttempts = 3, model?: string): Promise<CiResult> {
-  const tests = await listTests();
+export async function runCi(
+  maxAttempts = 3,
+  model?: string,
+  filters: { tags?: string[]; onlyNames?: string[] } = {},
+): Promise<CiResult> {
+  let tests = await listTests();
+  if (filters.tags && filters.tags.length > 0) {
+    tests = tests.filter((t) =>
+      (t.tags ?? []).some((tag) => filters.tags!.includes(tag)),
+    );
+  }
+  if (filters.onlyNames) {
+    const allow = new Set(filters.onlyNames);
+    tests = tests.filter((t) => allow.has(t.name));
+  }
   if (tests.length === 0) {
     return {
-      report: "## 🤖 Promptomate\n\n_No tests found in `.promptomate/`. Generate one with `promptomate gen` or `promptomate explore`._\n",
+      report: "## 🤖 Promptomate\n\n_No tests matched the current selection._\n",
       exitCode: 0,
       results: [],
     };
