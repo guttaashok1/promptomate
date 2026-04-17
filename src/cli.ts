@@ -3,6 +3,7 @@ import dotenv from "dotenv";
 dotenv.config({ override: true });
 import { Command } from "commander";
 import { generateTest } from "./agent.js";
+import { exploreAndGenerate } from "./explore.js";
 import { runTest } from "./runner.js";
 import { listTests, readSpec, readMetadata } from "./storage.js";
 import { healTest } from "./heal.js";
@@ -23,6 +24,30 @@ program
   .option("--no-run", "Only generate, don't execute")
   .action(async (prompt: string, opts: { url: string; name?: string; run: boolean }) => {
     const result = await generateTest({ prompt, url: opts.url, name: opts.name });
+    console.log(`\n✓ Generated ${result.path}`);
+    console.log(`  Summary: ${result.summary}\n`);
+    if (opts.run !== false) {
+      const run = await runTest(result.path);
+      process.exit(run.exitCode);
+    }
+  });
+
+program
+  .command("explore")
+  .description("Agent-driven: Claude clicks through the site to discover the flow, then emits a spec")
+  .argument("<prompt>", "What to test, e.g. 'sign up with new email and land on the dashboard'")
+  .requiredOption("-u, --url <url>", "Starting URL")
+  .option("-n, --name <slug>", "Test name slug")
+  .option("--headed", "Show the browser during exploration (useful for debugging)")
+  .option("--no-run", "Only generate, don't execute the final spec")
+  .action(async (prompt: string, opts: { url: string; name?: string; headed: boolean; run: boolean }) => {
+    console.log(`Exploring ${opts.url} ...`);
+    const result = await exploreAndGenerate({
+      prompt,
+      url: opts.url,
+      name: opts.name,
+      headless: !opts.headed,
+    });
     console.log(`\n✓ Generated ${result.path}`);
     console.log(`  Summary: ${result.summary}\n`);
     if (opts.run !== false) {

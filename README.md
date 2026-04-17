@@ -16,10 +16,17 @@ cp .env.example .env   # add your ANTHROPIC_API_KEY
 
 ## Usage
 
-Generate and run a test:
+**Single-shot generation** — looks at the landing page once, writes the spec, runs it:
 
 ```bash
 npm run dev -- gen "login with valid creds redirects to dashboard" --url https://app.example.com
+```
+
+**Agent-driven exploration** — Claude actually clicks through the site to discover the flow, then writes the spec from what it learned:
+
+```bash
+npm run dev -- explore "sign up with new email and land on the dashboard" --url https://app.example.com
+# --headed flag to watch the browser
 ```
 
 List saved tests:
@@ -42,10 +49,18 @@ npm run dev -- heal <name>
 
 ## How it works
 
-1. **Explore** — open the target URL in headless Chromium, capture the accessibility tree.
-2. **Generate** — Claude Opus 4.7 emits a `.spec.ts` file using semantic locators (`getByRole`, `getByText`, `getByLabel`) rather than brittle CSS selectors.
-3. **Execute** — Playwright runs the spec with screenshots and traces on failure.
-4. **Heal** — on a locator failure, `heal` re-snapshots the page and regenerates the test with the latest DOM + prior failure context.
+**`gen`** — one-shot:
+1. Open the target URL in headless Chromium, capture the ARIA snapshot.
+2. Claude Opus 4.7 emits a `.spec.ts` file using semantic locators.
+3. Playwright runs the spec with screenshots and traces on failure.
+
+**`explore`** — agentic:
+1. Launch a persistent Playwright session.
+2. Claude gets `navigate`, `click`, `fill`, `press`, `snapshot` tools and drives the browser itself — clicking through the flow until the scenario is proven end-to-end.
+3. Each tool result returns the updated ARIA snapshot so Claude can verify state after every action.
+4. When done, Claude emits a standalone `.spec.ts` using the exact locators that worked.
+
+**`heal`** — on a locator failure, re-snapshots the page and regenerates the test with the latest DOM + prior failure context.
 
 Tests are stored as `(prompt, generated code, URL)` triples under `.promptomate/`, so either surface — prompt or code — can be edited.
 
