@@ -1,7 +1,7 @@
 import Anthropic from "@anthropic-ai/sdk";
 import type { Page, Locator } from "@playwright/test";
-
-const MODEL = process.env.PROMPTOMATE_MODEL ?? "claude-opus-4-7";
+import { resolveModel } from "./models.js";
+import { recordUsage } from "./usage.js";
 
 let _client: Anthropic | null = null;
 function getClient(): Anthropic {
@@ -46,8 +46,9 @@ export async function expectVisual(
   const buffer = await target.screenshot({ type: "png" });
   const base64 = buffer.toString("base64");
 
+  const model = resolveModel();
   const response = await getClient().messages.create({
-    model: MODEL,
+    model,
     max_tokens: 1024,
     system: SYSTEM_PROMPT,
     messages: [
@@ -63,6 +64,8 @@ export async function expectVisual(
       },
     ],
   });
+
+  recordUsage(model, response.usage);
 
   const text = response.content
     .filter((b): b is Anthropic.Messages.TextBlock => b.type === "text")

@@ -30,6 +30,7 @@ export async function generateTest(opts: {
   prompt: string;
   url: string;
   name?: string;
+  model?: string;
 }): Promise<{ name: string; path: string; summary: string }> {
   const { snapshot, title } = await capturePage(opts.url);
 
@@ -43,7 +44,7 @@ Page title: ${title}
 ARIA snapshot of the landing page (use this to choose locators):
 ${truncate(snapshot, 12000)}`;
 
-  const raw = await callModel({ system: SYSTEM_PROMPT, user: userPrompt });
+  const raw = await callModel({ system: SYSTEM_PROMPT, user: userPrompt, model: opts.model });
   const { summary, code } = parseResponse(raw);
 
   const slug = opts.name ?? slugify(opts.prompt);

@@ -11,7 +11,14 @@ import { refineTest } from "./refine.js";
 import { runCi } from "./ci.js";
 import { startServer } from "./server.js";
 import { triage, triageAndApply } from "./triage.js";
+import { formatSummaryLine, resetUsage, summarize } from "./usage.js";
 import fs from "fs/promises";
+
+function printUsage(): void {
+  const s = summarize();
+  if (s.calls === 0) return;
+  console.log(`\n  ${formatSummaryLine(s)}`);
+}
 
 const program = new Command();
 
@@ -26,11 +33,14 @@ program
   .argument("<prompt>", "What to test, e.g. 'login with valid creds redirects to dashboard'")
   .requiredOption("-u, --url <url>", "Target URL")
   .option("-n, --name <slug>", "Test name slug (defaults to derived from prompt)")
+  .option("-m, --model <model>", "Model to use (opus | sonnet | haiku | full id)")
   .option("--no-run", "Only generate, don't execute")
-  .action(async (prompt: string, opts: { url: string; name?: string; run: boolean }) => {
-    const result = await generateTest({ prompt, url: opts.url, name: opts.name });
+  .action(async (prompt: string, opts: { url: string; name?: string; model?: string; run: boolean }) => {
+    resetUsage();
+    const result = await generateTest({ prompt, url: opts.url, name: opts.name, model: opts.model });
     console.log(`\n✓ Generated ${result.path}`);
-    console.log(`  Summary: ${result.summary}\n`);
+    console.log(`  Summary: ${result.summary}`);
+    printUsage();
     if (opts.run !== false) {
       const run = await runTest(result.path);
       process.exit(run.exitCode);
@@ -43,18 +53,22 @@ program
   .argument("<prompt>", "What to test, e.g. 'sign up with new email and land on the dashboard'")
   .requiredOption("-u, --url <url>", "Starting URL")
   .option("-n, --name <slug>", "Test name slug")
+  .option("-m, --model <model>", "Model to use (opus | sonnet | haiku | full id)")
   .option("--headed", "Show the browser during exploration (useful for debugging)")
   .option("--no-run", "Only generate, don't execute the final spec")
-  .action(async (prompt: string, opts: { url: string; name?: string; headed: boolean; run: boolean }) => {
+  .action(async (prompt: string, opts: { url: string; name?: string; model?: string; headed: boolean; run: boolean }) => {
+    resetUsage();
     console.log(`Exploring ${opts.url} ...`);
     const result = await exploreAndGenerate({
       prompt,
       url: opts.url,
       name: opts.name,
       headless: !opts.headed,
+      model: opts.model,
     });
     console.log(`\n✓ Generated ${result.path}`);
-    console.log(`  Summary: ${result.summary}\n`);
+    console.log(`  Summary: ${result.summary}`);
+    printUsage();
     if (opts.run !== false) {
       const run = await runTest(result.path);
       process.exit(run.exitCode);
@@ -74,16 +88,19 @@ program
   .command("heal")
   .description("Re-generate a failing test against the current DOM")
   .argument("<name>", "Test name")
-  .action(async (name: string) => {
+  .option("-m, --model <model>", "Model to use (opus | sonnet | haiku | full id)")
+  .action(async (name: string, opts: { model?: string }) => {
+    resetUsage();
     const metadata = await readMetadata(name);
     if (!metadata) {
       console.error(`No saved test "${name}". Run \`promptomate list\` to see saved tests.`);
       process.exit(1);
     }
     const oldCode = await readSpec(name);
-    const result = await healTest({ name, metadata, oldCode });
+    const result = await healTest({ name, metadata, oldCode, model: opts.model });
     console.log(`\n✓ Healed ${result.path}`);
-    console.log(`  Changes: ${result.summary}\n`);
+    console.log(`  Changes: ${result.summary}`);
+    printUsage();
     const run = await runTest(result.path);
     process.exit(run.exitCode);
   });
@@ -93,11 +110,14 @@ program
   .description("Tweak an existing test with a natural-language instruction")
   .argument("<name>", "Test name")
   .argument("<instruction>", "What to change, e.g. 'also check the cart badge shows 1'")
+  .option("-m, --model <model>", "Model to use (opus | sonnet | haiku | full id)")
   .option("--no-run", "Only refine, don't execute the updated spec")
-  .action(async (name: string, instruction: string, opts: { run: boolean }) => {
-    const result = await refineTest({ name, instruction });
+  .action(async (name: string, instruction: string, opts: { model?: string; run: boolean }) => {
+    resetUsage();
+    const result = await refineTest({ name, instruction, model: opts.model });
     console.log(`\n✓ Refined ${result.path}`);
-    console.log(`  Changes: ${result.summary}\n`);
+    console.log(`  Changes: ${result.summary}`);
+    printUsage();
     if (opts.run !== false) {
       const run = await runTest(result.path);
       process.exit(run.exitCode);
@@ -110,10 +130,12 @@ program
   .argument("<name>", "Test name")
   .option("--apply", "Auto-apply the suggestion (heal on drift, retry on flake, stop on real bug)")
   .option("--max-attempts <n>", "Max attempts when --apply is set (default 3)", "3")
-  .action(async (name: string, opts: { apply?: boolean; maxAttempts: string }) => {
+  .option("-m, --model <model>", "Model to use (opus | sonnet | haiku | full id)")
+  .action(async (name: string, opts: { apply?: boolean; maxAttempts: string; model?: string }) => {
+    resetUsage();
     if (opts.apply) {
       const max = Math.max(1, parseInt(opts.maxAttempts, 10) || 3);
-      const result = await triageAndApply(name, max);
+      const result = await triageAndApply(name, max, opts.model);
       console.log("\n━━━━━━━━━━━━ Summary ━━━━━━━━━━━━");
       console.log(`  Status:  ${result.finalStatus}`);
       if (result.finalVerdict) {
@@ -125,13 +147,15 @@ program
         const detail = a.action === "heal" ? ` → heal: ${a.healSummary}` : ` → ${a.action}`;
         console.log(`    ${i + 1}. ${verdict}${detail}`);
       }
-      console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n");
+      console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+      printUsage();
+      console.log("");
       if (result.finalStatus === "passed") {
         process.exit(0);
       }
       process.exit(result.finalVerdict === "real_bug" ? 2 : 1);
     }
-    const result = await triage(name);
+    const result = await triage(name, opts.model);
     if (result.passed) {
       console.log("\n✓ Test passed. Nothing to triage.");
       return;
@@ -141,7 +165,8 @@ program
     console.log(`  Confidence: ${result.confidence ?? "(parse failed)"}`);
     console.log(`  Reason:     ${result.reason ?? "(parse failed)"}`);
     console.log(`  Suggestion: ${result.suggestion ?? "(parse failed)"}`);
-    console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n");
+    console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+    printUsage();
     process.exit(1);
   });
 
@@ -150,12 +175,15 @@ program
   .description("Run every saved test with auto-triage and emit a markdown report (for CI)")
   .option("-o, --out <path>", "Write the markdown report to this path", "triage-report.md")
   .option("--max-attempts <n>", "Max recovery attempts per failing test", "3")
-  .action(async (opts: { out: string; maxAttempts: string }) => {
+  .option("-m, --model <model>", "Model to use (opus | sonnet | haiku | full id)")
+  .action(async (opts: { out: string; maxAttempts: string; model?: string }) => {
+    resetUsage();
     const max = Math.max(1, parseInt(opts.maxAttempts, 10) || 3);
-    const { report, exitCode } = await runCi(max);
+    const { report, exitCode } = await runCi(max, opts.model);
     await fs.writeFile(opts.out, report);
     console.log(`\nReport written to ${opts.out}`);
     console.log(report);
+    printUsage();
     process.exit(exitCode);
   });
 

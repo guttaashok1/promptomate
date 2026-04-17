@@ -15,7 +15,7 @@ export interface CiResult {
   results: TestRunResult[];
 }
 
-export async function runCi(maxAttempts = 3): Promise<CiResult> {
+export async function runCi(maxAttempts = 3, model?: string): Promise<CiResult> {
   const tests = await listTests();
   if (tests.length === 0) {
     return {
@@ -28,7 +28,7 @@ export async function runCi(maxAttempts = 3): Promise<CiResult> {
   const results: TestRunResult[] = [];
   for (const t of tests) {
     console.log(`\n========== ${t.name} ==========`);
-    const apply = await triageAndApply(t.name, maxAttempts);
+    const apply = await triageAndApply(t.name, maxAttempts, model);
     const status = computeStatus(apply);
     results.push({ name: t.name, status, apply });
   }

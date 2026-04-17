@@ -2,9 +2,9 @@ import Anthropic from "@anthropic-ai/sdk";
 import { chromium } from "@playwright/test";
 import { spawn } from "child_process";
 import { healTest } from "./heal.js";
+import { resolveModel } from "./models.js";
 import { readMetadata, readSpec, type TestMetadata } from "./storage.js";
-
-const MODEL = process.env.PROMPTOMATE_MODEL ?? "claude-opus-4-7";
+import { recordUsage } from "./usage.js";
 
 export type Verdict = "real_bug" | "flake" | "dom_drift";
 export type Confidence = "low" | "medium" | "high";
@@ -54,7 +54,7 @@ Respond with exactly four XML blocks, nothing else:
 <reason>One sentence citing specific evidence from the failure output and/or current snapshot.</reason>
 <suggestion>One concrete next step. Use the exact "Test name (slug)" from the input when referencing commands. For dom_drift: say to run 'promptomate heal <slug>' and name the locator change. For flake: say to re-run, naming the likely cause. For real_bug: describe the bug concretely and what to file.</suggestion>`;
 
-export async function triage(name: string): Promise<TriageResult> {
+export async function triage(name: string, model?: string): Promise<TriageResult> {
   const metadata = await readMetadata(name);
   if (!metadata) {
     throw new Error(`No saved test "${name}". Run 'promptomate list' to see saved tests.`);
@@ -79,6 +79,7 @@ export async function triage(name: string): Promise<TriageResult> {
     failureOutput: run.output,
     snapshot,
     screenshot,
+    model,
   });
 
   return { passed: false, rawOutput: run.output, ...classification };
@@ -87,12 +88,13 @@ export async function triage(name: string): Promise<TriageResult> {
 export async function triageAndApply(
   name: string,
   maxAttempts = 3,
+  model?: string,
 ): Promise<ApplyResult> {
   const attempts: Attempt[] = [];
 
   for (let i = 0; i < maxAttempts; i++) {
     console.log(`\n━━━━━━━━━━━ Attempt ${i + 1}/${maxAttempts} ━━━━━━━━━━━`);
-    const result = await triage(name);
+    const result = await triage(name, model);
 
     if (result.passed) {
       return { finalStatus: "passed", attempts };
@@ -117,7 +119,7 @@ export async function triageAndApply(
         attempts.push({ triage: result, action: "none" });
         return { finalStatus: "failed", finalVerdict: result.verdict, attempts };
       }
-      const healed = await healTest({ name, metadata, oldCode });
+      const healed = await healTest({ name, metadata, oldCode, model });
       console.log(`  Healed:     ${healed.summary}`);
       attempts.push({ triage: result, action: "heal", healSummary: healed.summary });
       continue;
@@ -190,6 +192,7 @@ async function classify(input: {
   failureOutput: string;
   snapshot: string;
   screenshot: Buffer;
+  model?: string;
 }): Promise<{
   verdict?: Verdict;
   confidence?: Confidence;
@@ -221,8 +224,9 @@ ${truncate(input.failureOutput, 6000)}
 ## Current ARIA snapshot (captured just now from the starting URL)
 ${truncate(input.snapshot, 6000)}`;
 
+  const model = resolveModel(input.model);
   const response = await client.messages.create({
-    model: MODEL,
+    model,
     max_tokens: 2048,
     thinking: { type: "adaptive" },
     system: SYSTEM_PROMPT,
@@ -243,6 +247,8 @@ ${truncate(input.snapshot, 6000)}`;
       },
     ],
   });
+
+  recordUsage(model, response.usage);
 
   const text = response.content
     .filter((b): b is Anthropic.Messages.TextBlock => b.type === "text")

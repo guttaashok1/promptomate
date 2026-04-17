@@ -30,6 +30,7 @@ Response format — respond with exactly two XML blocks, nothing else:
 export async function refineTest(opts: {
   name: string;
   instruction: string;
+  model?: string;
 }): Promise<{ path: string; summary: string }> {
   const metadata = await readMetadata(opts.name);
   if (!metadata) {
@@ -55,7 +56,7 @@ ${truncate(snapshot, 10000)}
 ## Modification instruction
 ${opts.instruction}`;
 
-  const raw = await callModel({ system: SYSTEM_PROMPT, user });
+  const raw = await callModel({ system: SYSTEM_PROMPT, user, model: opts.model });
   const { summary, code } = parseResponse(raw);
 
   const filePath = path.join("tests", `${opts.name}.spec.ts`);

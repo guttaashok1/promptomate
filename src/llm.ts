@@ -1,6 +1,6 @@
 import Anthropic from "@anthropic-ai/sdk";
-
-const MODEL = process.env.PROMPTOMATE_MODEL ?? "claude-opus-4-7";
+import { resolveModel } from "./models.js";
+import { recordUsage } from "./usage.js";
 
 let _client: Anthropic | null = null;
 function getClient(): Anthropic {
@@ -15,14 +15,21 @@ function getClient(): Anthropic {
   return _client;
 }
 
-export async function callModel(opts: { system: string; user: string }): Promise<string> {
+export async function callModel(opts: {
+  system: string;
+  user: string;
+  model?: string;
+}): Promise<string> {
+  const model = resolveModel(opts.model);
   const response = await getClient().messages.create({
-    model: MODEL,
+    model,
     max_tokens: 16000,
     thinking: { type: "adaptive" },
     system: opts.system,
     messages: [{ role: "user", content: opts.user }],
   });
+
+  recordUsage(model, response.usage);
 
   const parts: string[] = [];
   for (const block of response.content) {

@@ -22,6 +22,7 @@ export async function healTest(opts: {
   name: string;
   metadata: TestMetadata;
   oldCode: string;
+  model?: string;
 }): Promise<{ path: string; summary: string }> {
   const { snapshot, title } = await capturePage(opts.metadata.url);
 
@@ -37,7 +38,7 @@ ${opts.oldCode}
 --- Current ARIA snapshot ---
 ${truncate(snapshot, 12000)}`;
 
-  const raw = await callModel({ system: SYSTEM_PROMPT, user: userPrompt });
+  const raw = await callModel({ system: SYSTEM_PROMPT, user: userPrompt, model: opts.model });
   const { summary, code } = parseResponse(raw);
 
   const filePath = path.join("tests", `${opts.name}.spec.ts`);

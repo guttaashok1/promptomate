@@ -10,8 +10,9 @@ import {
   substituteSecretsDeep,
 } from "./secrets.js";
 import { saveMetadata, slugify } from "./storage.js";
+import { resolveModel } from "./models.js";
+import { recordUsage } from "./usage.js";
 
-const MODEL = process.env.PROMPTOMATE_MODEL ?? "claude-opus-4-7";
 const MAX_ITERATIONS = 30;
 
 const TOOL_DENYLIST = new Set([
@@ -72,8 +73,10 @@ export async function exploreAndGenerate(opts: {
   url: string;
   name?: string;
   headless?: boolean;
+  model?: string;
   onProgress?: (event: ProgressEvent) => void;
 }): Promise<{ name: string; path: string; summary: string }> {
+  const model = resolveModel(opts.model);
   const emit = (e: ProgressEvent) => opts.onProgress?.(e);
   emit({ type: "started", url: opts.url, prompt: opts.prompt });
 
@@ -110,7 +113,7 @@ Begin by calling browser_navigate with the starting URL. Then explore until the 
     let finalText = "";
     for (let i = 0; i < MAX_ITERATIONS; i++) {
       const response = await anthropic.messages.create({
-        model: MODEL,
+        model,
         max_tokens: 16000,
         thinking: { type: "adaptive" },
         system: SYSTEM_PROMPT,
@@ -118,6 +121,7 @@ Begin by calling browser_navigate with the starting URL. Then explore until the 
         messages,
       });
 
+      recordUsage(model, response.usage);
       messages.push({ role: "assistant", content: response.content });
 
       const toolUses = response.content.filter(
