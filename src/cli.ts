@@ -7,6 +7,7 @@ import { exploreAndGenerate } from "./explore.js";
 import { runTest } from "./runner.js";
 import { listTests, readSpec, readMetadata } from "./storage.js";
 import { healTest } from "./heal.js";
+import { triage } from "./triage.js";
 
 const program = new Command();
 
@@ -81,6 +82,25 @@ program
     console.log(`  Changes: ${result.summary}\n`);
     const run = await runTest(result.path);
     process.exit(run.exitCode);
+  });
+
+program
+  .command("triage")
+  .description("Re-run a test, classify any failure (real bug / flake / dom drift), and suggest a fix")
+  .argument("<name>", "Test name")
+  .action(async (name: string) => {
+    const result = await triage(name);
+    if (result.passed) {
+      console.log("\n✓ Test passed. Nothing to triage.");
+      return;
+    }
+    console.log("\n━━━━━━━━━━━ Triage ━━━━━━━━━━━");
+    console.log(`  Verdict:    ${result.verdict ?? "(parse failed)"}`);
+    console.log(`  Confidence: ${result.confidence ?? "(parse failed)"}`);
+    console.log(`  Reason:     ${result.reason ?? "(parse failed)"}`);
+    console.log(`  Suggestion: ${result.suggestion ?? "(parse failed)"}`);
+    console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n");
+    process.exit(1);
   });
 
 program

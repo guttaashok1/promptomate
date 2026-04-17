@@ -47,6 +47,12 @@ Heal a broken test after DOM drift:
 npm run dev -- heal <name>
 ```
 
+Triage a failure — classify as real bug / flake / DOM drift and suggest a fix:
+
+```bash
+npm run dev -- triage <name>
+```
+
 ## How it works
 
 **`gen`** — one-shot:
@@ -61,6 +67,8 @@ npm run dev -- heal <name>
 4. When done, Claude emits a standalone `.spec.ts` using the exact locators that worked.
 
 **`heal`** — on a locator failure, re-snapshots the page and regenerates the test with the latest DOM + prior failure context.
+
+**`triage`** — re-runs a failing test, captures the error output + a fresh ARIA snapshot + a screenshot of the current page, sends all of it to Claude, and gets back a verdict (`real_bug` / `flake` / `dom_drift`) with confidence and a concrete next action. Use when you don't know whether to `heal`, re-run, or file a bug.
 
 ## Visual assertions
 
