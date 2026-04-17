@@ -78,6 +78,34 @@ runs:
           --max-attempts "${{ inputs.max-attempts }}" \
           $MODEL_FLAG
 
+    - name: Append heal-diff patch to report
+      if: always()
+      shell: bash
+      working-directory: ${{ github.workspace }}
+      run: |
+        if [ ! -f triage-report.md ]; then
+          exit 0
+        fi
+        if ! grep -q "auto-healed" triage-report.md; then
+          exit 0
+        fi
+        DIFF=$(git diff --no-color HEAD -- "${{ inputs.tests-dir }}" "${{ inputs.metadata-dir }}" 2>/dev/null || true)
+        if [ -z "$DIFF" ]; then
+          exit 0
+        fi
+        {
+          echo ""
+          echo "### 🩹 Suggested heal patch"
+          echo ""
+          echo "<details><summary>Apply locally with \`git apply\`</summary>"
+          echo ""
+          echo '```diff'
+          echo "$DIFF"
+          echo '```'
+          echo ""
+          echo "</details>"
+        } >> triage-report.md
+
     - name: Upload triage report artifact
       if: always()
       uses: actions/upload-artifact@v4
