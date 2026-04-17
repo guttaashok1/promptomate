@@ -1,6 +1,6 @@
 {
   "prompt": "open https://practicesoftwaretesting.com/",
   "url": "https://practicesoftwaretesting.com/",
-  "summary": "Verifies the Practice Software Testing toolshop home page loads at the correct URL with its title, main navigation, and product catalog visible.",
+  "summary": "Verifies the Practice Software Testing toolshop home page loads at the correct URL with its title, main navigation, and product catalog visible. (refined: Kept the original home-page test and added a second test that walks through the Sign in → Register flow, fills the registration form with a unique email, submits, and verifies redirect to the login page; note that the registration page's exact fields/labels were not in the provided snapshot, so locators use the standard field names from this app — if any label differs, a small adjustment may be needed.)",
   "createdAt": "2026-04-17T08:09:00.677Z"
 }

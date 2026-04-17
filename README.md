@@ -130,6 +130,31 @@ jobs:
       ...
 ```
 
+## Deploy the web UI to Render
+
+Promptomate ships with a `render.yaml` for one-click deploy to [Render](https://render.com).
+
+**One-time setup:**
+
+1. Push this repo to GitHub (already done at `guttaashok1/promptomate`).
+2. Go to https://dashboard.render.com/ and sign in with GitHub.
+3. Click **New → Blueprint**, pick the `promptomate` repo. Render reads `render.yaml` automatically.
+4. When prompted, fill in the two `sync: false` secrets:
+   - `ANTHROPIC_API_KEY` — your Anthropic API key
+   - `PROMPTOMATE_AUTH_TOKEN` — a password of your choice (anyone with the URL will need it)
+5. Click **Apply**. First build takes ~5 min (installs Chromium).
+
+**You'll get a URL like `https://promptomate.onrender.com`.** Visit it, browser prompts for Basic auth — put **anything** as the username and your `PROMPTOMATE_AUTH_TOKEN` as the password.
+
+**Free tier limits (honest warning):**
+
+- **Sleeps after 15 minutes of inactivity** → cold start ~30 seconds
+- **512 MB RAM** — fine for `run` / `triage` / `refine`; `explore` against heavy pages may OOM and restart
+- **Ephemeral filesystem** — generated tests disappear on redeploy unless committed to the repo (saved tests in `.promptomate/` + `tests/` DO survive because they're checked out from git)
+- **Publicly exposed** — `PROMPTOMATE_AUTH_TOKEN` is what keeps strangers from burning your Anthropic budget. Don't leave it unset.
+
+For serious use, bump to Render's Starter plan ($7/mo, still 512 MB but no sleep) or Pro plan ($25/mo, 4 GB), or host elsewhere (Fly.io has a generous free tier with persistent volumes).
+
 ## CI / GitHub Actions (this repo)
 
 `.github/workflows/promptomate.yml` dogfoods the action on every PR:

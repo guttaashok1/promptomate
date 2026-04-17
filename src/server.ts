@@ -29,6 +29,25 @@ export function startServer(port: number): void {
   const app = express();
   app.use(express.json({ limit: "2mb" }));
 
+  const authToken = process.env.PROMPTOMATE_AUTH_TOKEN;
+  if (authToken) {
+    app.use((req, res, next) => {
+      const auth = req.headers.authorization ?? "";
+      const bearer = auth.match(/^Bearer (.+)$/);
+      if (bearer && bearer[1] === authToken) return next();
+      const basic = auth.match(/^Basic (.+)$/);
+      if (basic) {
+        const [, password] = Buffer.from(basic[1], "base64").toString().split(":");
+        if (password === authToken) return next();
+      }
+      res.setHeader("WWW-Authenticate", 'Basic realm="Promptomate"');
+      res.status(401).send("Authentication required");
+    });
+    console.log("Auth: PROMPTOMATE_AUTH_TOKEN set — requests require Basic auth (any username, password = the token)");
+  } else {
+    console.log("Auth: OPEN (no PROMPTOMATE_AUTH_TOKEN set). Do NOT expose publicly.");
+  }
+
   const publicDir = path.join(__dirname, "..", "public");
   app.use(express.static(publicDir));
 

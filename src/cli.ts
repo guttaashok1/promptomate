@@ -242,9 +242,9 @@ program
 program
   .command("serve")
   .description("Start the Promptomate web UI")
-  .option("-p, --port <port>", "Port to listen on", "3535")
-  .action((opts: { port: string }) => {
-    const port = parseInt(opts.port, 10) || 3535;
+  .option("-p, --port <port>", "Port to listen on (overrides $PORT env var)")
+  .action((opts: { port?: string }) => {
+    const port = parseInt(opts.port ?? process.env.PORT ?? "3535", 10) || 3535;
     startServer(port);
   });
 

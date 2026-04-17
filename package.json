@@ -40,6 +40,8 @@
   "scripts": {
     "build": "tsc && cp -r public dist/ 2>/dev/null || true",
     "dev": "tsx src/cli.ts",
+    "start": "node dist/cli.js serve",
+    "postinstall": "playwright install chromium || true",
     "test": "playwright test",
     "test:unit": "vitest run",
     "typecheck": "tsc --noEmit",
