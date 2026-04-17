@@ -1,6 +1,0 @@
-{
-  "prompt": "search for laptops returns results",
-  "url": "https://www.google.com",
-  "summary": "Searches Google for \"laptops\" and verifies that the results page loads with relevant results.",
-  "createdAt": "2026-04-17T06:55:08.003Z"
-}

@@ -60,6 +60,24 @@ npm run dev -- triage <name> --apply
 # caps at 3 attempts by default; override with --max-attempts <n>
 ```
 
+Run every saved test with auto-triage and write a markdown report (intended for CI):
+
+```bash
+npm run dev -- ci --out triage-report.md
+```
+
+## CI / GitHub Actions
+
+`.github/workflows/promptomate.yml` runs on every PR:
+
+1. Installs dependencies + Chromium (cached).
+2. Runs `promptomate ci` — each saved test goes through auto-triage.
+3. Uploads `triage-report.md` as a build artifact.
+4. Posts (or updates) a single PR comment with the report — passed / auto-healed / flake recovered / real bug, one row per test.
+5. Fails the check only if a real bug is detected or a test remained unrecovered.
+
+Set `ANTHROPIC_API_KEY` as a GitHub Actions secret. For private repos, `permissions: pull-requests: write` is already set in the workflow.
+
 ## How it works
 
 **`gen`** — one-shot:

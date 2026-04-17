@@ -7,7 +7,9 @@ import { exploreAndGenerate } from "./explore.js";
 import { runTest } from "./runner.js";
 import { listTests, readSpec, readMetadata } from "./storage.js";
 import { healTest } from "./heal.js";
+import { runCi } from "./ci.js";
 import { triage, triageAndApply } from "./triage.js";
+import fs from "fs/promises";
 
 const program = new Command();
 
@@ -123,6 +125,20 @@ program
     console.log(`  Suggestion: ${result.suggestion ?? "(parse failed)"}`);
     console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n");
     process.exit(1);
+  });
+
+program
+  .command("ci")
+  .description("Run every saved test with auto-triage and emit a markdown report (for CI)")
+  .option("-o, --out <path>", "Write the markdown report to this path", "triage-report.md")
+  .option("--max-attempts <n>", "Max recovery attempts per failing test", "3")
+  .action(async (opts: { out: string; maxAttempts: string }) => {
+    const max = Math.max(1, parseInt(opts.maxAttempts, 10) || 3);
+    const { report, exitCode } = await runCi(max);
+    await fs.writeFile(opts.out, report);
+    console.log(`\nReport written to ${opts.out}`);
+    console.log(report);
+    process.exit(exitCode);
   });
 
 program
