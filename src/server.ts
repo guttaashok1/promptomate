@@ -8,6 +8,7 @@ import { exploreAndGenerate, type ProgressEvent } from "./explore.js";
 import { refineTest } from "./refine.js";
 import { listTests, readMetadata, readSpec } from "./storage.js";
 import { triage, triageAndApply } from "./triage.js";
+import { formatSummaryLine, resetUsage, summarize } from "./usage.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -128,12 +129,14 @@ export function startServer(port: number): void {
       return res.status(400).json({ error: "instruction required" });
     }
     try {
+      resetUsage();
       const result = await refineTest({
         name: String(req.params.name),
         instruction,
       });
       const code = await readSpec(String(req.params.name));
-      res.json({ ...result, code });
+      const usage = summarize();
+      res.json({ ...result, code, usage: { ...usage, line: formatSummaryLine(usage) } });
     } catch (e) {
       res.status(500).json({ error: (e as Error).message });
     }
@@ -142,13 +145,12 @@ export function startServer(port: number): void {
   app.post("/api/triage/:name", async (req: Request, res: Response) => {
     const apply = (req.query.apply as string | undefined) === "true";
     try {
-      if (apply) {
-        const result = await triageAndApply(String(req.params.name), 3);
-        res.json(result);
-      } else {
-        const result = await triage(String(req.params.name));
-        res.json(result);
-      }
+      resetUsage();
+      const body = apply
+        ? await triageAndApply(String(req.params.name), 3)
+        : await triage(String(req.params.name));
+      const usage = summarize();
+      res.json({ ...body, usage: { ...usage, line: formatSummaryLine(usage) } });
     } catch (e) {
       res.status(500).json({ error: (e as Error).message });
     }

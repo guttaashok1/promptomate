@@ -279,7 +279,7 @@
           if (!res.ok) throw new Error(data.error || "refine failed");
           badge.textContent = "refined";
           badge.className = "status-badge drift";
-          showGenerated(data.summary, data.code, name);
+          showGenerated(data.summary, data.code, name, data.usage);
         }
       } catch (err) {
         showResult({ summary: "Error", log: err.message });
@@ -298,13 +298,17 @@
       `;
     }
 
-    function showGenerated(summary, code, name) {
+    function showGenerated(summary, code, name, usage) {
+      const usageHtml = usage && usage.line
+        ? `<div class="muted" style="margin-top:8px; font-size:12px;">💰 ${escapeHtml(usage.line)}</div>`
+        : "";
       resultEl.innerHTML = `
         <div class="summary">${escapeHtml(summary)}</div>
         <pre class="code">${escapeHtml(code)}</pre>
         <div class="row">
           <span class="muted">Saved as tests/${escapeHtml(name)}.spec.ts</span>
         </div>
+        ${usageHtml}
       `;
     }
 
@@ -314,9 +318,13 @@
         const detail = a.action === "heal" ? `→ heal: ${escapeHtml(a.healSummary || "")}` : `→ ${a.action}`;
         return `<li>Attempt ${i + 1}: <strong>${verdict}</strong> ${detail}</li>`;
       }).join("") || "<li>No attempts (passed on first try)</li>";
+      const usageHtml = result.usage && result.usage.line
+        ? `<div class="muted" style="margin-top:8px; font-size:12px;">💰 ${escapeHtml(result.usage.line)}</div>`
+        : "";
       resultEl.innerHTML = `
         <div class="summary">Triage status: <strong>${escapeHtml(result.finalStatus)}</strong>${result.finalVerdict ? ` · verdict: <strong>${escapeHtml(result.finalVerdict)}</strong>` : ""}</div>
         <ol>${attempts}</ol>
+        ${usageHtml}
       `;
     }
 
@@ -359,9 +367,10 @@
           appendLog(e.ok ? "ok" : "fail", `→ ${e.name}(${previewInput(e.input)}) ${mark}${e.error ? " " + e.error : ""}`);
         } else if (e.type === "done") {
           appendLog("ok", `✓ Generated ${e.path}`);
+          if (e.usage && e.usage.line) appendLog("meta", `💰 ${e.usage.line}`);
           statusEl.textContent = "";
           $("go").disabled = false;
-          showGenerated(e.summary, e.code, e.name);
+          showGenerated(e.summary, e.code, e.name, e.usage);
           loadTests();
           src.close();
         } else if (e.type === "error") {

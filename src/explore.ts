@@ -11,7 +11,7 @@ import {
 } from "./secrets.js";
 import { saveMetadata, slugify } from "./storage.js";
 import { resolveModel } from "./models.js";
-import { recordUsage } from "./usage.js";
+import { formatSummaryLine, recordUsage, resetUsage, summarize } from "./usage.js";
 
 const MAX_ITERATIONS = 30;
 
@@ -61,11 +61,19 @@ When done, STOP calling tools and respond with exactly two XML blocks:
 
 Do not wrap the code in markdown fences. Do not add commentary outside these two blocks.`;
 
+export interface UsageSnapshot {
+  calls: number;
+  inputTokens: number;
+  outputTokens: number;
+  costUsd: number;
+  line: string;
+}
+
 export type ProgressEvent =
   | { type: "started"; url: string; prompt: string }
   | { type: "tool_call"; name: string; input: unknown; ok: boolean; error?: string }
   | { type: "assistant_text"; text: string }
-  | { type: "done"; name: string; path: string; summary: string; code: string }
+  | { type: "done"; name: string; path: string; summary: string; code: string; usage: UsageSnapshot }
   | { type: "error"; message: string };
 
 export async function exploreAndGenerate(opts: {
@@ -79,6 +87,7 @@ export async function exploreAndGenerate(opts: {
 }): Promise<{ name: string; path: string; summary: string }> {
   const model = resolveModel(opts.model);
   const emit = (e: ProgressEvent) => opts.onProgress?.(e);
+  resetUsage();
   emit({ type: "started", url: opts.url, prompt: opts.prompt });
 
   const secretNames = extractSecretNames(opts.prompt);
@@ -180,7 +189,15 @@ Begin by calling browser_navigate with the starting URL. Then explore until the 
       tags: opts.tags,
     });
 
-    emit({ type: "done", name: slug, path: filePath, summary, code });
+    const u = summarize();
+    const usage: UsageSnapshot = {
+      calls: u.calls,
+      inputTokens: u.inputTokens,
+      outputTokens: u.outputTokens,
+      costUsd: u.costUsd,
+      line: formatSummaryLine(u),
+    };
+    emit({ type: "done", name: slug, path: filePath, summary, code, usage });
     return { name: slug, path: filePath, summary };
   } catch (e) {
     emit({ type: "error", message: (e as Error).message });
