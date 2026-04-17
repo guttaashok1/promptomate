@@ -1,0 +1,6 @@
+{
+  "prompt": "click the Sign in link from the homepage and verify the username and password fields appear",
+  "url": "https://github.com",
+  "summary": "Clicking the \"Sign in\" link on the GitHub homepage navigates to the login page where the \"Username or email address\" and \"Password\" fields are visible.",
+  "createdAt": "2026-04-17T07:07:51.094Z"
+}
