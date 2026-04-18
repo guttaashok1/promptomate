@@ -9,6 +9,18 @@ export interface CallUsage {
 }
 
 let calls: CallUsage[] = [];
+let budgetUsd: number | undefined;
+
+export class BudgetExceededError extends Error {
+  constructor(public costSoFar: number, public limit: number) {
+    super(`Budget exceeded: $${costSoFar.toFixed(4)} >= $${limit.toFixed(2)}`);
+    this.name = "BudgetExceededError";
+  }
+}
+
+export function setBudget(maxUsd: number | undefined): void {
+  budgetUsd = maxUsd && maxUsd > 0 ? maxUsd : undefined;
+}
 
 export function recordUsage(
   model: string,
@@ -27,10 +39,17 @@ export function recordUsage(
     cacheReadTokens: usage.cache_read_input_tokens ?? 0,
     cacheCreateTokens: usage.cache_creation_input_tokens ?? 0,
   });
+  if (budgetUsd !== undefined) {
+    const costSoFar = summarize().costUsd;
+    if (costSoFar >= budgetUsd) {
+      throw new BudgetExceededError(costSoFar, budgetUsd);
+    }
+  }
 }
 
 export function resetUsage(): void {
   calls = [];
+  budgetUsd = undefined;
 }
 
 export function getUsage(): CallUsage[] {

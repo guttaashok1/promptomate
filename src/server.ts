@@ -70,10 +70,12 @@ export function startServer(port: number): void {
   });
 
   app.post("/api/explore", async (req: Request, res: Response) => {
-    const { prompt, url, name } = req.body as {
+    const { prompt, url, name, model, lowMemory } = req.body as {
       prompt?: string;
       url?: string;
       name?: string;
+      model?: string;
+      lowMemory?: boolean;
     };
     if (!prompt || !url) {
       return res.status(400).json({ error: "prompt and url required" });
@@ -88,6 +90,8 @@ export function startServer(port: number): void {
       prompt,
       url,
       name,
+      model,
+      lowMemory,
       onProgress: (event) => {
         session.events.push(event);
         emitter.emit("event", event);

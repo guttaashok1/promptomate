@@ -15,7 +15,7 @@ import { initTelemetry, shutdownTelemetry, track } from "./telemetry.js";
 import { runCi } from "./ci.js";
 import { startServer } from "./server.js";
 import { triage, triageAndApply } from "./triage.js";
-import { formatSummaryLine, resetUsage, summarize } from "./usage.js";
+import { BudgetExceededError, formatSummaryLine, resetUsage, setBudget, summarize } from "./usage.js";
 import fs from "fs/promises";
 
 function printUsage(): void {
@@ -26,6 +26,14 @@ function printUsage(): void {
 
 function collect(value: string, prev: string[]): string[] {
   return [...prev, value];
+}
+
+function applyBudget(maxCost: string | undefined): void {
+  resetUsage();
+  if (maxCost) {
+    const n = parseFloat(maxCost);
+    if (n > 0) setBudget(n);
+  }
 }
 
 const VERSION = "0.1.0";
@@ -71,9 +79,10 @@ program
   .option("-t, --tag <tag>", "Tag to apply (repeatable)", collect, [])
   .option("--auth <name>", "Mark this test as an auth fixture that saves session state")
   .option("--use-auth <name>", "Consume a named auth fixture (browser starts authenticated)")
+  .option("--max-cost <usd>", "Abort if total spend exceeds this (USD)")
   .option("--no-run", "Only generate, don't execute")
-  .action(async (prompt: string, opts: { url: string; name?: string; model?: string; tag: string[]; auth?: string; useAuth?: string; run: boolean }) => {
-    resetUsage();
+  .action(async (prompt: string, opts: { url: string; name?: string; model?: string; tag: string[]; auth?: string; useAuth?: string; maxCost?: string; run: boolean }) => {
+    applyBudget(opts.maxCost);
     const result = await generateTest({
       prompt, url: opts.url, name: opts.name, model: opts.model, tags: opts.tag,
       authFixture: opts.auth, usesAuth: opts.useAuth,
@@ -99,9 +108,10 @@ program
   .option("--use-auth <name>", "Consume a named auth fixture (browser starts authenticated)")
   .option("--headed", "Show the browser during exploration (useful for debugging)")
   .option("--low-memory", "Reduce context + iteration budget for 512 MB hosts (e.g. Render free)")
+  .option("--max-cost <usd>", "Abort if total spend exceeds this (USD)")
   .option("--no-run", "Only generate, don't execute the final spec")
-  .action(async (prompt: string, opts: { url: string; name?: string; model?: string; tag: string[]; auth?: string; useAuth?: string; headed: boolean; lowMemory?: boolean; run: boolean }) => {
-    resetUsage();
+  .action(async (prompt: string, opts: { url: string; name?: string; model?: string; tag: string[]; auth?: string; useAuth?: string; headed: boolean; lowMemory?: boolean; maxCost?: string; run: boolean }) => {
+    applyBudget(opts.maxCost);
     console.log(`Exploring ${opts.url} ...`);
     const result = await exploreAndGenerate({
       prompt,
@@ -137,8 +147,9 @@ program
   .description("Re-generate a failing test against the current DOM")
   .argument("<name>", "Test name")
   .option("-m, --model <model>", "Model to use (opus | sonnet | haiku | full id)")
-  .action(async (name: string, opts: { model?: string }) => {
-    resetUsage();
+  .option("--max-cost <usd>", "Abort if total spend exceeds this (USD)")
+  .action(async (name: string, opts: { model?: string; maxCost?: string }) => {
+    applyBudget(opts.maxCost);
     const metadata = await readMetadata(name);
     if (!metadata) {
       console.error(`No saved test "${name}". Run \`promptomate list\` to see saved tests.`);
@@ -159,9 +170,10 @@ program
   .argument("<name>", "Test name")
   .argument("<instruction>", "What to change, e.g. 'also check the cart badge shows 1'")
   .option("-m, --model <model>", "Model to use (opus | sonnet | haiku | full id)")
+  .option("--max-cost <usd>", "Abort if total spend exceeds this (USD)")
   .option("--no-run", "Only refine, don't execute the updated spec")
-  .action(async (name: string, instruction: string, opts: { model?: string; run: boolean }) => {
-    resetUsage();
+  .action(async (name: string, instruction: string, opts: { model?: string; maxCost?: string; run: boolean }) => {
+    applyBudget(opts.maxCost);
     const result = await refineTest({ name, instruction, model: opts.model });
     console.log(`\n✓ Refined ${result.path}`);
     console.log(`  Changes: ${result.summary}`);
@@ -179,8 +191,9 @@ program
   .option("--apply", "Auto-apply the suggestion (heal on drift, retry on flake, stop on real bug)")
   .option("--max-attempts <n>", "Max attempts when --apply is set (default 3)", "3")
   .option("-m, --model <model>", "Model to use (opus | sonnet | haiku | full id)")
-  .action(async (name: string, opts: { apply?: boolean; maxAttempts: string; model?: string }) => {
-    resetUsage();
+  .option("--max-cost <usd>", "Abort if total spend exceeds this (USD)")
+  .action(async (name: string, opts: { apply?: boolean; maxAttempts: string; model?: string; maxCost?: string }) => {
+    applyBudget(opts.maxCost);
     if (opts.apply) {
       const max = Math.max(1, parseInt(opts.maxAttempts, 10) || 3);
       const result = await triageAndApply(name, max, opts.model);
@@ -228,8 +241,9 @@ program
   .option("--changed", "Only run tests whose spec or metadata has changed since <base>")
   .option("--base <ref>", "Base ref for --changed (default: origin/<PR base> or HEAD^)")
   .option("-c, --concurrency <n>", "Run this many tests in parallel (default 1)", "1")
-  .action(async (opts: { out: string; maxAttempts: string; model?: string; tag: string[]; changed?: boolean; base?: string; concurrency: string }) => {
-    resetUsage();
+  .option("--max-cost <usd>", "Abort if total spend exceeds this (USD)")
+  .action(async (opts: { out: string; maxAttempts: string; model?: string; tag: string[]; changed?: boolean; base?: string; concurrency: string; maxCost?: string }) => {
+    applyBudget(opts.maxCost);
     const max = Math.max(1, parseInt(opts.maxAttempts, 10) || 3);
     const concurrency = Math.max(1, parseInt(opts.concurrency, 10) || 1);
     let onlyNames: string[] | undefined;
@@ -303,6 +317,12 @@ program
   try {
     await program.parseAsync();
   } catch (err) {
+    if (err instanceof BudgetExceededError) {
+      console.error(`\n💰 Budget exceeded: spent $${err.costSoFar.toFixed(4)}, limit $${err.limit.toFixed(2)}. Aborting.`);
+      printUsage();
+      await shutdownTelemetry();
+      process.exit(3);
+    }
     console.error(err);
     await shutdownTelemetry();
     process.exit(1);
