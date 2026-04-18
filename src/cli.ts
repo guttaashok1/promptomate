@@ -11,6 +11,7 @@ import { refineTest } from "./refine.js";
 import { runInit } from "./init.js";
 import { runDoctor } from "./doctor.js";
 import { runQuickstart } from "./quickstart.js";
+import { runReport } from "./report.js";
 import { initTelemetry, shutdownTelemetry, track } from "./telemetry.js";
 import { runCi } from "./ci.js";
 import { startServer } from "./server.js";
@@ -278,6 +279,22 @@ program
   .action((opts: { port?: string }) => {
     const port = parseInt(opts.port ?? process.env.PORT ?? "3535", 10) || 3535;
     startServer(port);
+  });
+
+program
+  .command("report")
+  .description("Generate a weekly summary (markdown) from recent run history — pipe to email/Slack/etc.")
+  .option("-d, --days <n>", "How many days of run history to include", "7")
+  .option("-o, --out <path>", "Write to this file instead of stdout")
+  .action(async (opts: { days: string; out?: string }) => {
+    const days = Math.max(1, parseInt(opts.days, 10) || 7);
+    const { markdown, stats } = await runReport({ days, out: opts.out });
+    if (opts.out) {
+      console.log(`Report written to ${opts.out}`);
+      console.log(`  ${stats.runsInWindow} runs · ${stats.passRatePct.toFixed(1)}% pass rate`);
+    } else {
+      process.stdout.write(markdown);
+    }
   });
 
 program

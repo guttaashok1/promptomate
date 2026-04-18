@@ -200,7 +200,18 @@ The repo ships with `render.yaml`. One-click Blueprint:
 3. Apply — first build takes ~5 min (Chromium install)
 4. Open the URL → Basic auth prompt → any username + your token as password
 
-Free tier caveats: sleeps after 15 min idle, 512 MB RAM (fine for `run`/`triage`; heavy `explore` may OOM), ephemeral fs (saved tests in git survive). Bump to Render Starter ($7/mo) or Fly.io (free with persistent volumes) for serious use.
+Free tier caveats: sleeps after 15 min idle, 512 MB RAM (fine for `run`/`triage`; heavy `explore` may OOM — use `--low-memory` or the web UI checkbox), ephemeral fs (saved tests in git survive).
+
+### Or deploy to Fly.io (persistent volume, generous free tier)
+
+```bash
+# one-time
+fly launch --no-deploy            # reads fly.toml, creates app + 1 GB volume
+fly secrets set ANTHROPIC_API_KEY=sk-ant-... PROMPTOMATE_AUTH_TOKEN=yourpass
+fly deploy
+```
+
+Fly.io has a 1 GB persistent volume mounted at `/data`, so generated tests and run history **survive redeploys**. 1 GB RAM VM (double Render free), auto-stop after idle + instant wake-up. Roughly free for low-traffic demos.
 
 ## Architecture
 

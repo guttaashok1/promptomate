@@ -9,5 +9,6 @@ playwright/.cache/
 .promptomate/auth/
 .promptomate/runs/
 triage-report.md
+.fly/
 .DS_Store
 *.log
