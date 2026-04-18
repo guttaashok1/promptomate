@@ -9,6 +9,9 @@ import { listTests, readSpec, readMetadata } from "./storage.js";
 import { healTest } from "./heal.js";
 import { refineTest } from "./refine.js";
 import { runInit } from "./init.js";
+import { runDoctor } from "./doctor.js";
+import { runQuickstart } from "./quickstart.js";
+import { initTelemetry, shutdownTelemetry, track } from "./telemetry.js";
 import { runCi } from "./ci.js";
 import { startServer } from "./server.js";
 import { triage, triageAndApply } from "./triage.js";
@@ -25,12 +28,25 @@ function collect(value: string, prev: string[]): string[] {
   return [...prev, value];
 }
 
+const VERSION = "0.1.0";
 const program = new Command();
 
 program
   .name("promptomate")
   .description("Prompt-driven Playwright test generation")
-  .version("0.1.0");
+  .version(VERSION);
+
+program.hook("preAction", (_thisCommand, actionCommand) => {
+  track("cli.command", { command: actionCommand.name() });
+});
+
+program
+  .command("quickstart")
+  .description("Interactive first-run: scaffolds project, prompts for API key, runs a demo test")
+  .action(async () => {
+    const code = await runQuickstart();
+    process.exit(code);
+  });
 
 program
   .command("init")
@@ -82,8 +98,9 @@ program
   .option("--auth <name>", "Mark this test as an auth fixture that saves session state")
   .option("--use-auth <name>", "Consume a named auth fixture (browser starts authenticated)")
   .option("--headed", "Show the browser during exploration (useful for debugging)")
+  .option("--low-memory", "Reduce context + iteration budget for 512 MB hosts (e.g. Render free)")
   .option("--no-run", "Only generate, don't execute the final spec")
-  .action(async (prompt: string, opts: { url: string; name?: string; model?: string; tag: string[]; auth?: string; useAuth?: string; headed: boolean; run: boolean }) => {
+  .action(async (prompt: string, opts: { url: string; name?: string; model?: string; tag: string[]; auth?: string; useAuth?: string; headed: boolean; lowMemory?: boolean; run: boolean }) => {
     resetUsage();
     console.log(`Exploring ${opts.url} ...`);
     const result = await exploreAndGenerate({
@@ -95,6 +112,7 @@ program
       tags: opts.tag,
       authFixture: opts.auth,
       usesAuth: opts.useAuth,
+      lowMemory: opts.lowMemory,
     });
     console.log(`\n✓ Generated ${result.path}`);
     console.log(`  Summary: ${result.summary}`);
@@ -249,6 +267,14 @@ program
   });
 
 program
+  .command("doctor")
+  .description("Diagnostic checks (Node, API key, Chromium, MCP, dirs, saved tests)")
+  .action(async () => {
+    const { exitCode } = await runDoctor();
+    process.exit(exitCode);
+  });
+
+program
   .command("list")
   .description("List all saved tests")
   .option("-t, --tag <tag>", "Only list tests with this tag (repeatable)", collect, [])
@@ -272,7 +298,14 @@ program
     }
   });
 
-program.parseAsync().catch((err) => {
-  console.error(err);
-  process.exit(1);
-});
+(async () => {
+  await initTelemetry(VERSION);
+  try {
+    await program.parseAsync();
+  } catch (err) {
+    console.error(err);
+    await shutdownTelemetry();
+    process.exit(1);
+  }
+  await shutdownTelemetry();
+})();

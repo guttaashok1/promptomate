@@ -54,11 +54,14 @@
     "@playwright/test": "^1.50.0",
     "commander": "^13.0.0",
     "dotenv": "^16.4.7",
-    "express": "^5.2.1"
+    "express": "^5.2.1",
+    "posthog-node": "^5.29.2",
+    "prompts": "^2.4.2"
   },
   "devDependencies": {
     "@types/express": "^5.0.6",
     "@types/node": "^22.10.0",
+    "@types/prompts": "^2.4.9",
     "tsx": "^4.19.2",
     "typescript": "^5.7.2",
     "vitest": "^4.1.4"

@@ -13,15 +13,23 @@ import { AUTH_DIR, authStateFile, saveMetadata, slugify } from "./storage.js";
 import { resolveModel } from "./models.js";
 import { formatSummaryLine, recordUsage, resetUsage, summarize } from "./usage.js";
 
-const MAX_ITERATIONS = 30;
+const MAX_ITERATIONS_DEFAULT = 30;
+const MAX_ITERATIONS_LOW_MEM = 15;
 
-const TOOL_DENYLIST = new Set([
+const TOOL_DENYLIST_DEFAULT = new Set([
   "browser_install",
   "browser_close",
   "browser_evaluate",
   "browser_resize",
   "browser_pdf_save",
 ]);
+const TOOL_DENYLIST_LOW_MEM = new Set([
+  ...TOOL_DENYLIST_DEFAULT,
+  "browser_take_screenshot",
+]);
+
+const TOOL_TEXT_TRUNCATE_DEFAULT = 8000;
+const TOOL_TEXT_TRUNCATE_LOW_MEM = 3000;
 
 type ToolContent = string | Array<
   Anthropic.Messages.TextBlockParam | Anthropic.Messages.ImageBlockParam
@@ -103,9 +111,14 @@ export async function exploreAndGenerate(opts: {
   tags?: string[];
   authFixture?: string;
   usesAuth?: string;
+  lowMemory?: boolean;
   onProgress?: (event: ProgressEvent) => void;
 }): Promise<{ name: string; path: string; summary: string }> {
   const model = resolveModel(opts.model);
+  const lowMem = !!opts.lowMemory;
+  const MAX_ITERATIONS = lowMem ? MAX_ITERATIONS_LOW_MEM : MAX_ITERATIONS_DEFAULT;
+  const TOOL_DENYLIST = lowMem ? TOOL_DENYLIST_LOW_MEM : TOOL_DENYLIST_DEFAULT;
+  const TOOL_TEXT_TRUNCATE = lowMem ? TOOL_TEXT_TRUNCATE_LOW_MEM : TOOL_TEXT_TRUNCATE_DEFAULT;
   let storageState: string | undefined;
   if (opts.usesAuth) {
     storageState = authStateFile(opts.usesAuth);
@@ -193,7 +206,7 @@ Begin by calling browser_navigate with the starting URL. Then explore until the 
           results.push({
             type: "tool_result",
             tool_use_id: call.id,
-            content: translateMcpContent(mcpResult.content, secrets),
+            content: translateMcpContent(mcpResult.content, secrets, TOOL_TEXT_TRUNCATE),
             is_error: mcpResult.isError,
           });
         } catch (e) {
@@ -247,6 +260,7 @@ Begin by calling browser_navigate with the starting URL. Then explore until the 
 function translateMcpContent(
   content: McpContentBlock[],
   secrets: Record<string, string> = {},
+  textTruncate = 8000,
 ): ToolContent {
   const blocks: Array<
     Anthropic.Messages.TextBlockParam | Anthropic.Messages.ImageBlockParam
@@ -255,7 +269,7 @@ function translateMcpContent(
   for (const item of content) {
     if (item.type === "text" && typeof item.text === "string") {
       const clean = hasSecrets ? scrubSecrets(item.text, secrets) : item.text;
-      blocks.push({ type: "text", text: truncate(clean, 8000) });
+      blocks.push({ type: "text", text: truncate(clean, textTruncate) });
     } else if (item.type === "image" && typeof item.data === "string") {
       const mediaType = (item.mimeType ?? "image/png") as
         | "image/png"
