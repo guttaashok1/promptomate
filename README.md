@@ -1,103 +1,95 @@
-# Promptomate
+# 🤖 Promptomate
 
-Prompt-driven Playwright test generation. Write UI tests in English; Promptomate generates Playwright specs using semantic locators, runs them, and heals broken locators when the DOM drifts.
+**Playwright tests written in English. Self-heal when the UI changes. CI that tells you which red tests are real bugs.**
 
-## Why
+[![npm version](https://img.shields.io/npm/v/promptomate.svg)](https://www.npmjs.com/package/promptomate)
+[![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
+[![GitHub stars](https://img.shields.io/github/stars/guttaashok1/promptomate?style=social)](https://github.com/guttaashok1/promptomate)
+[![CI](https://github.com/guttaashok1/promptomate/actions/workflows/promptomate.yml/badge.svg)](https://github.com/guttaashok1/promptomate/actions)
 
-Tosca gives you drag-and-drop but no AI. Playwright gives you code but no AI. Promptomate adds a Claude-powered agent layer on top of Playwright so non-engineers can describe tests in prose and engineers can still edit the generated TypeScript.
-
-## Install
-
-```bash
-npm install
-npx playwright install chromium
-cp .env.example .env   # add your ANTHROPIC_API_KEY
-```
-
-## Usage
-
-**Single-shot generation** — looks at the landing page once, writes the spec, runs it:
+<!-- Demo GIF placeholder — replace with actual recording:
+https://github.com/guttaashok1/promptomate/assets/...
+-->
 
 ```bash
-npm run dev -- gen "login with valid creds redirects to dashboard" --url https://app.example.com
+npm install -g promptomate
+promptomate explore "log in, add a backpack to cart, verify badge shows 1" \
+  --url https://www.saucedemo.com
 ```
 
-**Agent-driven exploration** — Claude actually clicks through the site to discover the flow, then writes the spec from what it learned:
+Claude clicks through your site, confirms the flow works, and writes a standalone Playwright spec — typically in under a minute. When the UI changes, run `promptomate triage --apply` and it heals the locators itself. In CI, failing tests get classified as **real bug** / **flake** / **DOM drift** so your team knows what to look at.
+
+## Why another testing tool?
+
+| | Tosca | Cypress | Playwright | Testim | Mabl | **Promptomate** |
+|---|:---:|:---:|:---:|:---:|:---:|:---:|
+| Open source | ❌ | ✅ | ✅ | ❌ | ❌ | **✅ MIT** |
+| Write tests in English | ❌ | ❌ | ❌ | ⚠️ no-code | ⚠️ no-code | **✅** |
+| Self-healing locators | ❌ | ❌ | ❌ | ✅ | ✅ | **✅** |
+| AI failure triage | ❌ | ❌ | ❌ | ⚠️ partial | ⚠️ partial | **✅** |
+| Visual assertions (AI-judged) | ❌ | ❌ | ❌ | ⚠️ snapshots | ⚠️ snapshots | **✅** |
+| Human-editable code output | ❌ drag-drop | ✅ | ✅ | ⚠️ limited | ⚠️ limited | **✅ TypeScript** |
+| Local-first / BYO API key | ❌ | ⚠️ cloud | ✅ | ❌ cloud only | ❌ cloud only | **✅** |
+| CI PR comments with diagnosis | ❌ | ⚠️ basic | ⚠️ basic | ✅ | ✅ | **✅ + heal patch** |
+| Free tier | ❌ | ✅ limited | ✅ full | ❌ | ❌ | **✅ forever** |
+| Pricing (team of 10) | $50k+/yr | $0–$900/mo | Free | $5k+/mo | $5k+/mo | **$0 (BYO key)** |
+
+The wedge: **Promptomate is the only tool sitting at the intersection of open-source, AI-powered, and local-first.** Testim and Mabl are the closest in capability but require proprietary cloud, seat licensing, and data going out to their servers. Vanilla Playwright / Cypress have no AI at all.
+
+## Who it's for
+
+- **QA engineers** tired of rewriting locators after every UI change
+- **Product managers & designers** who want to protect critical flows without waiting for engineering
+- **Small eng teams** adding tests to products where formal QA doesn't exist
+- **Anyone running Playwright** who wants self-healing and smarter CI
+
+## Install (3 commands)
 
 ```bash
-npm run dev -- explore "sign up with new email and land on the dashboard" --url https://app.example.com
-# --headed flag to watch the browser
+npm install -g promptomate
+promptomate init                      # scaffolds .env, playwright.config.ts, tests/, .promptomate/
+# add ANTHROPIC_API_KEY to the .env it creates
+promptomate explore "log in and see dashboard" --url https://your-app.com
 ```
 
-List saved tests:
+> You'll need an [Anthropic API key](https://console.anthropic.com/settings/keys). Bring-your-own — Promptomate never handles billing.
+
+## Core commands
+
+| Command | What it does |
+|---|---|
+| `init` | Scaffold a fresh project in the current directory |
+| `gen <prompt>` | One-shot generation from a single page snapshot |
+| `explore <prompt>` | Agent-driven: clicks through the site, handles multi-step flows |
+| `refine <name> <instruction>` | Tweak an existing spec with natural language |
+| `heal <name>` | Re-resolve drifted locators against current DOM |
+| `triage <name>` | Classify a failing test: real bug / flake / DOM drift |
+| `triage <name> --apply` | Auto-heal or retry based on the verdict, stop on real bugs |
+| `ci` | Run every saved test through auto-triage, emit markdown report |
+| `run <name>` / `list` | Execute a saved test / list all of them |
+| `serve` | Start the web UI at `localhost:3535` |
+
+Every command that calls the API prints a cost line at the end:
+
+```
+3 API calls · 8,412 in + 1,203 out · $0.0720 · claude-opus-4-7 ×3
+```
+
+## Web UI
 
 ```bash
-npm run dev -- list
+promptomate serve
+# open http://localhost:3535
 ```
 
-Re-run a saved test:
-
-```bash
-npm run dev -- run <name>
-```
-
-Heal a broken test after DOM drift:
-
-```bash
-npm run dev -- heal <name>
-```
-
-Refine an existing test with a natural-language instruction:
-
-```bash
-npm run dev -- refine <name> "also verify the cart badge shows 1"
-npm run dev -- refine <name> "remove the menu button assertion"
-```
-
-Triage a failure — classify as real bug / flake / DOM drift and suggest a fix:
-
-```bash
-npm run dev -- triage <name>
-```
-
-Auto-apply the triage suggestion (heal on drift, retry on flake, stop on real bug):
-
-```bash
-npm run dev -- triage <name> --apply
-# caps at 3 attempts by default; override with --max-attempts <n>
-```
-
-Run every saved test with auto-triage and write a markdown report (intended for CI):
-
-```bash
-npm run dev -- ci --out triage-report.md
-```
-
-## Model selection + cost reporting
-
-Default model is `claude-opus-4-7`. Every command accepts `-m, --model`:
-
-```bash
-npm run dev -- explore "..." --url ... --model sonnet  # claude-sonnet-4-6
-npm run dev -- triage my-test --apply --model haiku    # claude-haiku-4-5
-```
-
-Aliases: `opus` · `opus-4.6` · `sonnet` · `haiku`. Or pass a full model ID. `PROMPTOMATE_MODEL` env var is used when the flag is absent.
-
-Every command that calls the API prints a one-line cost summary at the end:
-
-```
-  3 API calls · 8,412 in + 1,203 out · $0.0720 · claude-opus-4-7 ×3
-```
-
-Cost calc factors in cache read/write pricing. Per-model totals appear when multiple models are used in one run.
+Point-and-click interface for non-technical users. Live stream of the agent's tool calls, generated spec preview, **Run / Refine / Triage / View** buttons per saved test. Last-run status + pass/fail + output visible inline.
 
 ## Drop-in GitHub Action
 
-Other repos can consume this repo as a reusable action:
+Auto-triage every PR. One comment per test with verdict; healed specs get a ready-to-`git apply` diff patch in the comment.
 
 ```yaml
-# .github/workflows/promptomate.yml in YOUR repo
+# .github/workflows/promptomate.yml in your repo
 name: Promptomate
 on: [pull_request]
 jobs:
@@ -108,7 +100,7 @@ jobs:
       pull-requests: write
     steps:
       - uses: actions/checkout@v4
-      - uses: guttaashok1/promptomate@main  # or pin to a tag: @v0.1.0
+      - uses: guttaashok1/promptomate@main
         with:
           anthropic-api-key: ${{ secrets.ANTHROPIC_API_KEY }}
           # optional:
@@ -116,149 +108,133 @@ jobs:
           max-attempts: "3"
 ```
 
-Inputs: `anthropic-api-key` (required), `model`, `max-attempts`, `tests-dir`, `metadata-dir`.
+Inputs: `anthropic-api-key` (required), `model` (`opus`/`sonnet`/`haiku`), `max-attempts`, `tests-dir`, `metadata-dir`.
 
-For `${VARNAME}` placeholders in your prompts (SAUCE_PASSWORD, etc.), set them as **job-level** env in your workflow — composite-action inputs don't propagate that way:
+## Key features
 
-```yaml
-jobs:
-  test:
-    runs-on: ubuntu-latest
-    env:
-      SAUCE_PASSWORD: ${{ secrets.SAUCE_PASSWORD }}
-    steps:
-      ...
-```
+### 🧭 MCP-backed exploration
+`explore` spawns Microsoft's official [Playwright MCP server](https://github.com/microsoft/playwright-mcp) as a subprocess. Claude gets `browser_navigate`, `browser_click`, `browser_hover`, `browser_drag`, `browser_type`, `browser_fill_form`, `browser_screenshot`, `browser_file_upload`, `browser_network_requests`, `browser_console_messages`, and more. It recovers from failed clicks, handles multi-page flows, and writes a standalone spec that uses regular Playwright locators (not MCP refs).
 
-## Deploy the web UI to Render
+### 🩹 Self-healing locators
+`heal` captures a fresh ARIA snapshot of the page and regenerates only the parts of the spec that changed. `triage --apply` runs this automatically when it diagnoses drift.
 
-Promptomate ships with a `render.yaml` for one-click deploy to [Render](https://render.com).
+### 🔎 AI failure triage
+Given the test code, Playwright's error output, a fresh ARIA snapshot, and a screenshot, Claude classifies failures as:
+- **`real_bug`** — the feature is actually broken (stops the PR with exit code 2)
+- **`flake`** — transient/network/timing issue (retries with a short pause)
+- **`dom_drift`** — UI changed, locators need updating (runs `heal` automatically)
 
-**One-time setup:**
-
-1. Push this repo to GitHub (already done at `guttaashok1/promptomate`).
-2. Go to https://dashboard.render.com/ and sign in with GitHub.
-3. Click **New → Blueprint**, pick the `promptomate` repo. Render reads `render.yaml` automatically.
-4. When prompted, fill in the two `sync: false` secrets:
-   - `ANTHROPIC_API_KEY` — your Anthropic API key
-   - `PROMPTOMATE_AUTH_TOKEN` — a password of your choice (anyone with the URL will need it)
-5. Click **Apply**. First build takes ~5 min (installs Chromium).
-
-**You'll get a URL like `https://promptomate.onrender.com`.** Visit it, browser prompts for Basic auth — put **anything** as the username and your `PROMPTOMATE_AUTH_TOKEN` as the password.
-
-**Free tier limits (honest warning):**
-
-- **Sleeps after 15 minutes of inactivity** → cold start ~30 seconds
-- **512 MB RAM** — fine for `run` / `triage` / `refine`; `explore` against heavy pages may OOM and restart
-- **Ephemeral filesystem** — generated tests disappear on redeploy unless committed to the repo (saved tests in `.promptomate/` + `tests/` DO survive because they're checked out from git)
-- **Publicly exposed** — `PROMPTOMATE_AUTH_TOKEN` is what keeps strangers from burning your Anthropic budget. Don't leave it unset.
-
-For serious use, bump to Render's Starter plan ($7/mo, still 512 MB but no sleep) or Pro plan ($25/mo, 4 GB), or host elsewhere (Fly.io has a generous free tier with persistent volumes).
-
-## CI / GitHub Actions (this repo)
-
-`.github/workflows/promptomate.yml` dogfoods the action on every PR:
-
-1. Installs dependencies + Chromium (cached).
-2. Runs `promptomate ci` — each saved test goes through auto-triage.
-3. Uploads `triage-report.md` as a build artifact.
-4. Posts (or updates) a single PR comment with the report — passed / auto-healed / flake recovered / real bug, one row per test.
-5. Fails the check only if a real bug is detected or a test remained unrecovered.
-
-Set `ANTHROPIC_API_KEY` as a GitHub Actions secret. For private repos, `permissions: pull-requests: write` is already set in the workflow.
-
-## How it works
-
-**`gen`** — one-shot:
-1. Open the target URL in headless Chromium, capture the ARIA snapshot.
-2. Claude Opus 4.7 emits a `.spec.ts` file using semantic locators.
-3. Playwright runs the spec with screenshots and traces on failure.
-
-**`explore`** — agentic, MCP-backed:
-1. Spawn Microsoft's **Playwright MCP server** as a subprocess (`@playwright/mcp`).
-2. Bridge its tool surface into the Anthropic API via `@modelcontextprotocol/sdk` — Claude gets `browser_navigate`, `browser_click`, `browser_hover`, `browser_drag`, `browser_type`, `browser_fill_form`, `browser_press_key`, `browser_snapshot`, `browser_take_screenshot`, `browser_file_upload`, `browser_tab_*`, `browser_network_requests`, `browser_console_messages`, `browser_wait_for`, etc.
-3. Claude drives the browser: each tool call goes MCP client → server → real Chromium and returns an updated snapshot + refs.
-4. When done, Claude emits a standalone `.spec.ts` using regular Playwright locators (`getByRole` / `getByText`) — the spec does NOT depend on MCP at runtime.
-
-**`heal`** — on a locator failure, re-snapshots the page and regenerates the test with the latest DOM + prior failure context.
-
-**`refine`** — iterate on a test without hand-editing the TypeScript. Takes an existing spec + a natural-language modification instruction + a fresh ARIA snapshot, and emits a surgical update. Use when you want to add an assertion, remove a check, adjust a wait, or change test data. Keeps the existing structure unless the instruction says otherwise.
-
-**`triage`** — re-runs a failing test, captures the error output + a fresh ARIA snapshot + a screenshot of the current page, sends all of it to Claude, and gets back a verdict (`real_bug` / `flake` / `dom_drift`) with confidence and a concrete next action. Use when you don't know whether to `heal`, re-run, or file a bug.
-
-**`triage --apply`** — auto-executes the verdict in a recovery loop: `dom_drift` → `heal` → re-run, `flake` → brief pause → re-run, `real_bug` → stop (exit code 2) because human attention is needed. Caps at 3 attempts. Exit code `0` if recovered, `1` if still failing, `2` if a real bug was diagnosed.
-
-## Auth fixtures (login once, reuse across tests)
-
-Full login flows are slow and flaky when repeated per-test. Playwright's `storageState` pattern solves this: log in once, save the browser session, reuse it.
-
-Produce a fixture:
-
-```bash
-npm run dev -- explore "log in as standard_user with password \${SAUCE_PASSWORD}" \
-  --url https://www.saucedemo.com \
-  --auth sauce-user \
-  --name sauce-auth-setup
-```
-
-The generated spec ends with `await page.context().storageState({ path: ".promptomate/auth/sauce-user.json" })`. Running that spec produces the session file (gitignored; contains cookies).
-
-Consume it from other tests:
-
-```bash
-npm run dev -- explore "add the backpack to cart and verify the badge shows 1" \
-  --url https://www.saucedemo.com/inventory.html \
-  --use-auth sauce-user \
-  --name cart-adds-badge
-```
-
-Key behaviors:
-- Playwright MCP is launched with `--storage-state ...` so the agent sees an **already-authenticated** page during exploration — it skips login steps entirely.
-- The generated spec gets `test.use({ storageState: ".promptomate/auth/sauce-user.json" });` right after the imports; Playwright applies it before every test.
-- `promptomate ci` runs auth-fixture tests **serially first**, then fans out the rest with `--concurrency`. The session file is fresh when dependents run.
-- `.promptomate/auth/` is gitignored — sessions never get committed.
-
-Rotate a fixture by re-running its setup spec — the file gets overwritten.
-
-## Secrets
-
-Never paste passwords, API tokens, or session cookies into prompts — they'd end up in `.promptomate/*.json` (committed metadata). Use `${VARNAME}` placeholders instead:
-
-```bash
-# in .env (gitignored)
-SAUCE_PASSWORD=secret_sauce
-
-# then
-npm run dev -- explore "log in as standard_user with password \${SAUCE_PASSWORD}" --url https://www.saucedemo.com
-```
-
-How it works:
-- Promptomate extracts `${VARNAME}` tokens from your prompt and resolves them against `process.env` (errors cleanly if unset).
-- During `explore`: when the agent calls `browser_fill_form` or similar with `${VARNAME}`, the harness substitutes the real value before dispatching to the browser. Any tool result text gets scrubbed back to `${VARNAME}` so the value doesn't round-trip through the model unnecessarily.
-- The generated `.spec.ts` uses `process.env.VARNAME ?? ""` — never the literal value. Playwright's config loads `.env`, so runs just work.
-- Saved metadata stores the placeholder template (`"log in with password ${SAUCE_PASSWORD}"`), safe to commit.
-
-Shell escape `\${...}` so your shell doesn't expand it before Promptomate sees it, or wrap the whole prompt in single quotes.
-
-## Visual assertions
-
-DOM-based assertions are fast and free but can't judge things like "looks like an error state" or "the chart shows a downward trend." For those, generated specs can import a Claude-vision-powered helper:
+### 👁️ Visual assertions
+For checks the DOM can't express:
 
 ```ts
-import { expectVisual } from "../src/assertions.js";
-
 await expectVisual(page, "a red error banner above the Login button");
 await expectVisual(page.getByRole("figure"), "a rendered image of a shoe, not a broken-image placeholder");
 ```
 
-`expectVisual` takes a screenshot of the target (Page or Locator), sends it to Claude with the description, and throws if Claude judges it a fail. Costs one API call (~$0.01) and ~1s per assertion. The explore agent decides when to reach for it vs. a cheaper DOM check — during exploration it can also call `screenshot()` to see the actual render when the ARIA tree is ambiguous.
+Claude Vision judges the screenshot. Throws on fail. One API call per assertion (~$0.01, ~1s).
 
-Tests are stored as `(prompt, generated code, URL)` triples under `.promptomate/`, so either surface — prompt or code — can be edited.
+### 🔐 Secrets via `${VARNAME}`
 
-## Roadmap
+```bash
+# .env (gitignored)
+SAUCE_PASSWORD=secret_sauce
 
-- Agent-driven exploration via Playwright MCP (multi-step test discovery)
-- Visual/semantic assertions via Claude vision
-- Test data generation
-- CI action with flake triage
-- Web UI
+# prompt
+promptomate explore "log in with password \${SAUCE_PASSWORD}" --url https://app.example.com
+```
+
+- Substituted at tool-dispatch time so the agent drives a logged-in browser
+- Scrubbed from tool results so the value doesn't round-trip through the model
+- Generated spec uses `process.env.SAUCE_PASSWORD ?? ""` — **never** inlined
+- Metadata stores the placeholder template — safe to commit
+
+### 🔑 Auth fixtures (login once, reuse across tests)
+
+```bash
+# Setup: produces .promptomate/auth/sauce-user.json
+promptomate explore "log in as standard_user with \${SAUCE_PASSWORD}" \
+  --url https://www.saucedemo.com --auth sauce-user
+
+# Consumers: skip the login flow entirely
+promptomate explore "add backpack to cart" \
+  --url https://www.saucedemo.com/inventory.html --use-auth sauce-user
+```
+
+The generated consumer spec opens with `test.use({ storageState: ".promptomate/auth/sauce-user.json" })`. Playwright applies the saved session automatically. `ci` runs auth fixtures serially first, then fans out dependents in parallel.
+
+### 💸 Cost-aware by default
+- Every command prints a per-run cost summary (tokens in/out, dollars, model breakdown)
+- `-m, --model <opus|sonnet|haiku|full-id>` on every command — downshift for cost control
+- Cache read (×0.1) and cache write (×1.25) pricing factored in
+
+### 🏷️ Organize + filter
+- Tag tests: `gen/explore -t smoke -t critical`
+- Run subsets: `ci -t smoke`
+- Run only changed tests in CI: `ci --changed --base origin/main`
+- Parallel execution: `ci --concurrency 4`
+
+### 🧪 Auto-triage in CI comments
+The included GitHub Action posts a single comment per PR:
+
+```
+🤖 Promptomate Test Report
+✅ 8 passed · 🩹 1 auto-healed · 🐛 1 real bug
+
+| Test             | Status           | Details                          |
+| user-login       | ✅ passed        |                                   |
+| add-to-cart      | 🩹 auto-healed   | Button "Add" renamed to "Buy"    |
+| checkout-flow    | 🐛 real bug      | Cart total shows $64 (expected $32) |
+```
+
+When auto-heal fires, the comment also includes a `git diff` patch you can `git apply` locally.
+
+## Deploy the web UI
+
+[![Deploy to Render](https://render.com/images/deploy-to-render-button.svg)](https://render.com/deploy)
+
+The repo ships with `render.yaml`. One-click Blueprint:
+
+1. https://dashboard.render.com/ → **New → Blueprint** → pick this repo
+2. Fill in two secrets: `ANTHROPIC_API_KEY` + `PROMPTOMATE_AUTH_TOKEN` (password you invent)
+3. Apply — first build takes ~5 min (Chromium install)
+4. Open the URL → Basic auth prompt → any username + your token as password
+
+Free tier caveats: sleeps after 15 min idle, 512 MB RAM (fine for `run`/`triage`; heavy `explore` may OOM), ephemeral fs (saved tests in git survive). Bump to Render Starter ($7/mo) or Fly.io (free with persistent volumes) for serious use.
+
+## Architecture
+
+- **CLI** (TypeScript) — all 10 commands, ~2k LoC
+- **Claude Opus 4.7** by default (override with `--model sonnet` or `haiku`)
+- **Playwright MCP** as a subprocess for agentic browser control
+- **Express + static HTML + SSE** for the web UI (no framework)
+- **Postgres/Prisma** coming in Phase 3 (multi-tenant cloud tier)
+
+See [CLAUDE.md](CLAUDE.md) for a full source-tree map and conventions.
+
+## Project & roadmap
+
+- **[Roadmap board](https://github.com/users/guttaashok1/projects/2)** — all open work, organized by phase
+- **[PLAN.md](PLAN.md)** — living GTM + product plan (intent, marketing, sales, revenue, support, UX, analytics)
+- **[Milestones](https://github.com/guttaashok1/promptomate/milestones)** — target dates for each phase
+- **[Open issues](https://github.com/guttaashok1/promptomate/issues)** — grab one labelled `good first issue` (coming soon)
+
+## Community & support
+
+- 🐛 [Report a bug](https://github.com/guttaashok1/promptomate/issues/new)
+- 💡 [Request a feature](https://github.com/guttaashok1/promptomate/issues/new)
+- 📖 [Read CLAUDE.md](CLAUDE.md) — conventions for contributing
+- 🤝 [Contributing guide](CONTRIBUTING.md)
+- 📜 [Code of Conduct](CODE_OF_CONDUCT.md)
+
+## Contributing
+
+PRs welcome. Short version: fork, `npm install`, `npm run test:unit` (44 tests, ~135ms), write your change, open a PR. Full details in [CONTRIBUTING.md](CONTRIBUTING.md).
+
+## License
+
+[MIT](LICENSE) — free forever for personal and commercial use.
+
+---
+
+Built with [Claude](https://claude.com) and [Playwright](https://playwright.dev). The [Anthropic Agent SDK](https://github.com/anthropics/anthropic-sdk-typescript) powers the agentic exploration; [Microsoft's Playwright MCP](https://github.com/microsoft/playwright-mcp) exposes the browser.
