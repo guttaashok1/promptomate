@@ -2,6 +2,8 @@
 
 **Playwright tests written in English. Self-heal when the UI changes. CI that tells you which red tests are real bugs.**
 
+[**promptomate-landing.vercel.app**](https://promptomate-landing.vercel.app) · [npm](https://www.npmjs.com/package/promptomate) · [GitHub Marketplace](https://github.com/marketplace/actions/promptomate-ci)
+
 [![npm version](https://img.shields.io/npm/v/promptomate.svg)](https://www.npmjs.com/package/promptomate)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 [![GitHub stars](https://img.shields.io/github/stars/guttaashok1/promptomate?style=social)](https://github.com/guttaashok1/promptomate)
