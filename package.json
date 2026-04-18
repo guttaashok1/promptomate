@@ -29,7 +29,7 @@
     "node": ">=20"
   },
   "bin": {
-    "promptomate": "./dist/cli.js"
+    "promptomate": "dist/cli.js"
   },
   "files": [
     "dist/",
