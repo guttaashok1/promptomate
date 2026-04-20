@@ -149,16 +149,20 @@ export function startServer(port: number): void {
     } catch {
       return res.status(404).json({ error: "test not found" });
     }
-    const startedAt = Date.now();
-    const result = await runPlaywright(specPath);
-    const durationMs = Date.now() - startedAt;
-    await saveLastRun(name, {
-      passed: result.passed,
-      output: result.output,
-      ranAt: new Date().toISOString(),
-      durationMs,
-    });
-    res.json({ ...result, durationMs });
+    try {
+      const startedAt = Date.now();
+      const result = await runPlaywright(specPath);
+      const durationMs = Date.now() - startedAt;
+      await saveLastRun(name, {
+        passed: result.passed,
+        output: result.output,
+        ranAt: new Date().toISOString(),
+        durationMs,
+      });
+      res.json({ ...result, durationMs });
+    } catch (e) {
+      res.status(500).json({ error: (e as Error).message });
+    }
   });
 
   app.post("/api/refine/:name", async (req: Request, res: Response) => {
