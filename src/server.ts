@@ -76,17 +76,27 @@ function sseStream<T>(
     return;
   }
 
+  // Keep the connection alive through Render's / nginx idle-connection timeout
+  const heartbeat = setInterval(() => {
+    if (!res.writableEnded) res.write(": heartbeat\n\n");
+  }, 15_000);
+
+  const cleanup = () => clearInterval(heartbeat);
+
   const onDone = (result: T) => {
+    cleanup();
     res.write(`data: ${JSON.stringify({ type: "result", ...serialize(result) })}\n\n`);
     res.end();
   };
   const onError = (message: string) => {
+    cleanup();
     res.write(`data: ${JSON.stringify({ type: "error", message })}\n\n`);
     res.end();
   };
   session.emitter.once("done", onDone);
   session.emitter.once("error", onError);
   req.on("close", () => {
+    cleanup();
     session.emitter.off("done", onDone);
     session.emitter.off("error", onError);
   });
