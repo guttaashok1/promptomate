@@ -4,7 +4,7 @@ services:
     runtime: node
     plan: free
     buildCommand: npm ci && npm run build && PLAYWRIGHT_BROWSERS_PATH=/opt/render/.cache/ms-playwright npx playwright install --with-deps chromium-headless-shell
-    startCommand: npx playwright install chromium-headless-shell && npm start
+    startCommand: export PLAYWRIGHT_BROWSERS_PATH=/opt/render/.cache/ms-playwright && npx playwright install chromium-headless-shell && node dist/cli.js serve
     healthCheckPath: /health
     autoDeploy: true
     envVars:
