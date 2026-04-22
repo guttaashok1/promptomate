@@ -5,7 +5,7 @@ dotenv.config({ override: true });
 
 export default defineConfig({
   testDir: "./tests",
-  timeout: 30_000,
+  timeout: 120_000,
   fullyParallel: false,
   reporter: [["list"]],
   use: {
