@@ -12,3 +12,4 @@ triage-report.md
 .fly/
 .DS_Store
 *.log
+.pw-browsers/
