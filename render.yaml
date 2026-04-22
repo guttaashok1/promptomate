@@ -3,7 +3,7 @@ services:
     name: promptomate
     runtime: node
     plan: free
-    buildCommand: npm ci && npm run build && PLAYWRIGHT_BROWSERS_PATH=/opt/render/project/src/.pw-browsers npx playwright install --with-deps chromium-headless-shell
+    buildCommand: npm ci && npm run build && PLAYWRIGHT_BROWSERS_PATH=/opt/render/project/src/.pw-browsers npx playwright install chromium-headless-shell
     startCommand: node dist/cli.js serve
     healthCheckPath: /health
     autoDeploy: true
