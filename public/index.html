@@ -262,6 +262,25 @@
       return String(s).replace(/[&<>"']/g, (c) => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
     }
 
+    // POST to start a job (returns {id}), then open an SSE stream for the result.
+    function streamJob(startPath, streamBase, fetchOpts) {
+      return fetch(startPath, fetchOpts)
+        .then(r => r.json())
+        .then(({ id, error }) => {
+          if (error) throw new Error(error);
+          return new Promise((resolve, reject) => {
+            const src = new EventSource(`${streamBase}/${id}/stream`);
+            src.onmessage = (e) => {
+              const data = JSON.parse(e.data);
+              src.close();
+              if (data.type === "result") resolve(data);
+              else reject(new Error(data.message || "unknown error"));
+            };
+            src.onerror = () => { src.close(); reject(new Error("Connection lost")); };
+          });
+        });
+    }
+
     async function handleTestAction(e) {
       const btn = e.currentTarget;
       const action = btn.dataset.action;
@@ -276,8 +295,11 @@
         if (action === "run") {
           badge.textContent = "running";
           badge.className = "status-badge running";
-          const res = await fetch(`/api/run/${encodeURIComponent(name)}`, { method: "POST" });
-          const data = await res.json();
+          const data = await streamJob(
+            `/api/run/${encodeURIComponent(name)}`,
+            "/api/run",
+            { method: "POST" },
+          );
           badge.textContent = data.passed ? "passed" : "failed";
           badge.className = `status-badge ${data.passed ? "pass" : "fail"}`;
           const dur = data.durationMs ? ` (${(data.durationMs / 1000).toFixed(1)}s)` : "";
@@ -285,8 +307,11 @@
         } else if (action === "triage") {
           badge.textContent = "triaging";
           badge.className = "status-badge running";
-          const res = await fetch(`/api/triage/${encodeURIComponent(name)}?apply=true`, { method: "POST" });
-          const data = await res.json();
+          const data = await streamJob(
+            `/api/triage/${encodeURIComponent(name)}?apply=true`,
+            "/api/triage",
+            { method: "POST" },
+          );
           const passed = data.finalStatus === "passed";
           badge.textContent = passed ? "recovered" : (data.finalVerdict || "failed");
           badge.className = `status-badge ${passed ? "pass" : data.finalVerdict === "dom_drift" ? "drift" : "fail"}`;
@@ -300,13 +325,11 @@
           if (!instruction) return;
           badge.textContent = "refining";
           badge.className = "status-badge running";
-          const res = await fetch(`/api/refine/${encodeURIComponent(name)}`, {
-            method: "POST",
-            headers: { "content-type": "application/json" },
-            body: JSON.stringify({ instruction }),
-          });
-          const data = await res.json();
-          if (!res.ok) throw new Error(data.error || "refine failed");
+          const data = await streamJob(
+            `/api/refine/${encodeURIComponent(name)}`,
+            "/api/refine",
+            { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ instruction }) },
+          );
           badge.textContent = "refined";
           badge.className = "status-badge drift";
           showGenerated(data.summary, data.code, name, data.usage);
@@ -370,8 +393,11 @@
       const btn = resultEl.querySelector(`[data-run-inline="${CSS.escape(name)}"]`);
       if (btn) { btn.disabled = true; btn.textContent = "Running…"; }
       try {
-        const res = await fetch(`/api/run/${encodeURIComponent(name)}`, { method: "POST" });
-        const data = await res.json();
+        const data = await streamJob(
+          `/api/run/${encodeURIComponent(name)}`,
+          "/api/run",
+          { method: "POST" },
+        );
         const detail = await fetch(`/api/test/${encodeURIComponent(name)}`).then(r => r.json());
         showGenerated(detail.metadata.summary, detail.code, name, undefined, detail.lastRun);
         const row = document.querySelector(`tr[data-name="${CSS.escape(name)}"] [data-status]`);

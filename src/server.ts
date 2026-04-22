@@ -19,10 +19,77 @@ interface Session {
   done: boolean;
 }
 
+interface AsyncSession<T> {
+  emitter: EventEmitter;
+  done: boolean;
+  result?: T;
+  error?: string;
+}
+
 const sessions = new Map<string, Session>();
+const asyncSessions = new Map<string, AsyncSession<unknown>>();
 
 function makeSessionId(): string {
   return Math.random().toString(36).slice(2, 10);
+}
+
+function startAsyncSession<T>(
+  key: string,
+  work: () => Promise<T>,
+): AsyncSession<T> {
+  const emitter = new EventEmitter();
+  const session: AsyncSession<T> = { emitter, done: false };
+  asyncSessions.set(key, session as AsyncSession<unknown>);
+  work()
+    .then((result) => {
+      session.result = result;
+      emitter.emit("done", result);
+    })
+    .catch((err) => {
+      session.error = (err as Error).message;
+      emitter.emit("error", session.error);
+    })
+    .finally(() => {
+      session.done = true;
+    });
+  return session;
+}
+
+function sseStream<T>(
+  req: Request,
+  res: Response,
+  session: AsyncSession<T>,
+  serialize: (result: T) => object,
+): void {
+  res.setHeader("Content-Type", "text/event-stream");
+  res.setHeader("Cache-Control", "no-cache");
+  res.setHeader("Connection", "keep-alive");
+  res.flushHeaders?.();
+
+  if (session.done) {
+    if (session.result !== undefined) {
+      res.write(`data: ${JSON.stringify({ type: "result", ...serialize(session.result as T) })}\n\n`);
+    } else {
+      res.write(`data: ${JSON.stringify({ type: "error", message: session.error ?? "unknown error" })}\n\n`);
+    }
+    res.end();
+    return;
+  }
+
+  const onDone = (result: T) => {
+    res.write(`data: ${JSON.stringify({ type: "result", ...serialize(result) })}\n\n`);
+    res.end();
+  };
+  const onError = (message: string) => {
+    res.write(`data: ${JSON.stringify({ type: "error", message })}\n\n`);
+    res.end();
+  };
+  session.emitter.once("done", onDone);
+  session.emitter.once("error", onError);
+  req.on("close", () => {
+    session.emitter.off("done", onDone);
+    session.emitter.off("error", onError);
+  });
 }
 
 export function startServer(port: number): void {
@@ -141,6 +208,7 @@ export function startServer(port: number): void {
     req.on("close", () => session.emitter.off("event", handler));
   });
 
+  // ── Run ──────────────────────────────────────────────────────────
   app.post("/api/run/:name", async (req: Request, res: Response) => {
     const name = String(req.params.name);
     const specPath = path.join("tests", `${name}.spec.ts`);
@@ -149,8 +217,9 @@ export function startServer(port: number): void {
     } catch {
       return res.status(404).json({ error: "test not found" });
     }
-    try {
-      const startedAt = Date.now();
+    const id = makeSessionId();
+    const startedAt = Date.now();
+    startAsyncSession(id, async () => {
       const result = await runPlaywright(specPath);
       const durationMs = Date.now() - startedAt;
       await saveLastRun(name, {
@@ -159,43 +228,61 @@ export function startServer(port: number): void {
         ranAt: new Date().toISOString(),
         durationMs,
       });
-      res.json({ ...result, durationMs });
-    } catch (e) {
-      res.status(500).json({ error: (e as Error).message });
-    }
+      return { ...result, durationMs };
+    });
+    res.json({ id });
   });
 
+  app.get("/api/run/:id/stream", (req: Request, res: Response) => {
+    const session = asyncSessions.get(String(req.params.id));
+    if (!session) return res.status(404).end();
+    sseStream(req, res, session as AsyncSession<{ passed: boolean; output: string; durationMs: number }>, (r) => r as object);
+  });
+
+  // ── Refine ───────────────────────────────────────────────────────
   app.post("/api/refine/:name", async (req: Request, res: Response) => {
     const { instruction } = req.body as { instruction?: string };
     if (!instruction) {
       return res.status(400).json({ error: "instruction required" });
     }
-    try {
-      resetUsage();
-      const result = await refineTest({
-        name: String(req.params.name),
-        instruction,
-      });
-      const code = await readSpec(String(req.params.name));
+    const name = String(req.params.name);
+    const id = makeSessionId();
+    resetUsage();
+    startAsyncSession(id, async () => {
+      const result = await refineTest({ name, instruction });
+      const code = await readSpec(name);
       const usage = summarize();
-      res.json({ ...result, code, usage: { ...usage, line: formatSummaryLine(usage) } });
-    } catch (e) {
-      res.status(500).json({ error: (e as Error).message });
-    }
+      return { ...result, code, usage: { ...usage, line: formatSummaryLine(usage) } };
+    });
+    res.json({ id });
   });
 
+  app.get("/api/refine/:id/stream", (req: Request, res: Response) => {
+    const session = asyncSessions.get(String(req.params.id));
+    if (!session) return res.status(404).end();
+    sseStream(req, res, session as AsyncSession<object>, (r) => r as object);
+  });
+
+  // ── Triage ───────────────────────────────────────────────────────
   app.post("/api/triage/:name", async (req: Request, res: Response) => {
     const apply = (req.query.apply as string | undefined) === "true";
-    try {
-      resetUsage();
+    const name = String(req.params.name);
+    const id = makeSessionId();
+    resetUsage();
+    startAsyncSession(id, async () => {
       const body = apply
-        ? await triageAndApply(String(req.params.name), 3)
-        : await triage(String(req.params.name));
+        ? await triageAndApply(name, 3)
+        : await triage(name);
       const usage = summarize();
-      res.json({ ...body, usage: { ...usage, line: formatSummaryLine(usage) } });
-    } catch (e) {
-      res.status(500).json({ error: (e as Error).message });
-    }
+      return { ...body, usage: { ...usage, line: formatSummaryLine(usage) } };
+    });
+    res.json({ id });
+  });
+
+  app.get("/api/triage/:id/stream", (req: Request, res: Response) => {
+    const session = asyncSessions.get(String(req.params.id));
+    if (!session) return res.status(404).end();
+    sseStream(req, res, session as AsyncSession<object>, (r) => r as object);
   });
 
   app.listen(port, () => {
