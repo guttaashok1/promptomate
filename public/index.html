@@ -266,16 +266,21 @@
     // Polling is used instead of SSE because SSE (EventSource) can't send auth headers
     // and long-lived connections are unreliable through proxy layers like Render's nginx.
     async function pollJob(startPath, fetchOpts) {
-      const { id, error } = await fetch(startPath, fetchOpts).then(r => r.json());
+      const startRes = await fetch(startPath, fetchOpts);
+      if (!startRes.ok) throw new Error(`Start failed: HTTP ${startRes.status}`);
+      const { id, error } = await startRes.json();
       if (error) throw new Error(error);
-      while (true) {
+      for (let i = 0; i < 120; i++) { // max 4 minutes
         await new Promise(r => setTimeout(r, 2000));
-        const data = await fetch(`/api/result/${id}`).then(r => r.json());
+        const pollRes = await fetch(`/api/result/${id}`, { credentials: "same-origin" });
+        if (!pollRes.ok) throw new Error(`Poll failed: HTTP ${pollRes.status}`);
+        const data = await pollRes.json();
         if (data.done) {
           if (!data.ok) throw new Error(data.error || "unknown error");
           return data;
         }
       }
+      throw new Error("Timed out waiting for result after 4 minutes");
     }
 
     async function handleTestAction(e) {
