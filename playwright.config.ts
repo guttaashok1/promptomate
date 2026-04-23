@@ -14,9 +14,11 @@ export default defineConfig({
     headless: true,
     launchOptions: {
       args: [
-        "--disable-dev-shm-usage",    // use /tmp instead of /dev/shm (critical in containers)
+        "--disable-dev-shm-usage",       // use /tmp instead of /dev/shm (critical in containers)
         "--no-sandbox",
         "--disable-setuid-sandbox",
+        "--single-process",              // run browser + renderer in one process (~100MB saved)
+        "--no-zygote",                   // disable zygote spawner (Linux containers)
         "--disable-background-networking",
         "--disable-default-apps",
         "--disable-sync",

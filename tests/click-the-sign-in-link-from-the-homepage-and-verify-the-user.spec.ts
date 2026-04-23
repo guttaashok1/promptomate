@@ -1,7 +1,7 @@
 import { test, expect } from "@playwright/test";
 
 test("Sign in link from homepage reveals username and password fields", async ({ page }) => {
-  await page.goto("https://github.com");
+  await page.goto("https://github.com", { waitUntil: "domcontentloaded" });
 
   await page.getByRole("link", { name: "Sign in" }).click();
 

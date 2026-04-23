@@ -1,7 +1,7 @@
 import { test, expect } from "@playwright/test";
 
 test("home page loads with navigation and products", async ({ page }) => {
-  await page.goto("https://practicesoftwaretesting.com/");
+  await page.goto("https://practicesoftwaretesting.com/", { waitUntil: "domcontentloaded" });
 
   await expect(page).toHaveURL("https://practicesoftwaretesting.com/");
   await expect(page).toHaveTitle("Practice Software Testing - Toolshop - v5.0");
@@ -32,7 +32,7 @@ test("home page loads with navigation and products", async ({ page }) => {
 });
 
 test("a new user can register successfully", async ({ page }) => {
-  await page.goto("https://practicesoftwaretesting.com/");
+  await page.goto("https://practicesoftwaretesting.com/", { waitUntil: "domcontentloaded" });
 
   // Navigate to Sign in
   await page

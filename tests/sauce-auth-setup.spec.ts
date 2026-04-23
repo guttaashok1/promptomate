@@ -3,8 +3,12 @@
 // browser storage state to .promptomate/auth/sauce-user.json so that other
 // tests can reuse the session without repeating the login UI steps.
 import { test, expect } from "@playwright/test";
+import { mkdir } from "fs/promises";
 
 test("log in as standard_user and save storage state", async ({ page }) => {
+  // Ensure the auth directory exists on all environments (Render, local, CI)
+  await mkdir(".promptomate/auth", { recursive: true });
+
   await page.goto("https://www.saucedemo.com");
 
   await expect(page).toHaveTitle("Swag Labs");
