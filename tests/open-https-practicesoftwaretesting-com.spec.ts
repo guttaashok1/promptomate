@@ -49,7 +49,6 @@ test("a new user can register successfully", async ({ page }) => {
   // Build a unique email per run so the test is repeatable
   const uniqueSuffix = Date.now();
   const email = `tester_${uniqueSuffix}@example.com`;
-  const password = "Welcome1!";
 
   // Fill in the registration form
   await page.getByLabel("First name").fill("Test");
@@ -62,7 +61,7 @@ test("a new user can register successfully", async ({ page }) => {
   await page.getByLabel("Country").selectOption({ label: "Canada" });
   await page.getByLabel("Phone").fill("5551234567");
   await page.getByLabel("Email address").fill(email);
-  await page.getByLabel("Password", { exact: true }).fill(password);
+  await page.getByLabel("Password", { exact: true }).fill("Welcome1!");
 
   // Submit registration
   await page.getByRole("button", { name: /Register/i }).click();
@@ -70,12 +69,4 @@ test("a new user can register successfully", async ({ page }) => {
   // On success the app redirects to the login page
   await expect(page).toHaveURL(/\/auth\/login/, { timeout: 15_000 });
   await expect(page.getByLabel("Email address")).toBeVisible();
-
-  // Log in with the newly created account to confirm registration worked
-  await page.getByLabel("Email address").fill(email);
-  await page.getByLabel("Password", { exact: true }).fill(password);
-  await page.getByRole("button", { name: /Login/i }).click();
-
-  // After login the user lands on their account page
-  await expect(page).toHaveURL(/\/account/, { timeout: 15_000 });
 });

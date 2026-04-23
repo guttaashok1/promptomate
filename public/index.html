@@ -277,6 +277,8 @@
         catch { continue; } // network blip, retry
         // 502/503/504 = server temporarily restarting under load, retry
         if (pollRes.status === 502 || pollRes.status === 503 || pollRes.status === 504) continue;
+        // 404 = server restarted and lost the in-memory session
+        if (pollRes.status === 404) throw new Error("Server restarted mid-run — please click Run again.");
         if (!pollRes.ok) throw new Error(`Poll failed: HTTP ${pollRes.status}`);
         const data = await pollRes.json();
         if (data.done) {

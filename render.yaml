@@ -16,3 +16,5 @@ services:
         sync: false
       - key: PROMPTOMATE_AUTH_TOKEN
         sync: false
+      - key: SAUCE_PASSWORD
+        value: secret_sauce
