@@ -2,6 +2,7 @@ import { spawn } from "child_process";
 import { EventEmitter } from "events";
 import express, { type Request, type Response } from "express";
 import fs from "fs/promises";
+import fsSync from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
 import { exploreAndGenerate, type ProgressEvent } from "./explore.js";
@@ -107,7 +108,19 @@ export function startServer(port: number): void {
   app.use(express.json({ limit: "2mb" }));
 
   app.get("/health", (_req, res) => {
-    res.json({ ok: true });
+    const browsersPath = process.env.PLAYWRIGHT_BROWSERS_PATH ?? "(not set)";
+    const binaryPath = browsersPath !== "(not set)"
+      ? path.join(browsersPath, "chromium_headless_shell-1217", "chrome-headless-shell-linux64", "chrome-headless-shell")
+      : null;
+    const binaryExists = binaryPath ? fsSync.existsSync(binaryPath) : false;
+    res.json({
+      ok: true,
+      node: process.version,
+      cwd: process.cwd(),
+      PLAYWRIGHT_BROWSERS_PATH: browsersPath,
+      browserBinaryExists: binaryExists,
+      binaryPath,
+    });
   });
 
   const authToken = process.env.PROMPTOMATE_AUTH_TOKEN;
