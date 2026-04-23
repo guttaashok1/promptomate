@@ -324,6 +324,15 @@ export function startServer(port: number): void {
     sseStream(req, res, session as AsyncSession<object>, (r) => r as object);
   });
 
+  // ── Poll (works through any proxy, no long-lived connection needed) ──
+  app.get("/api/result/:id", (req: Request, res: Response) => {
+    const session = asyncSessions.get(String(req.params.id));
+    if (!session) return res.status(404).json({ error: "not found" });
+    if (!session.done) return res.json({ done: false });
+    if (session.result !== undefined) return res.json({ done: true, ok: true, ...(session.result as object) });
+    return res.json({ done: true, ok: false, error: session.error ?? "unknown error" });
+  });
+
   app.listen(port, () => {
     if (process.env.RENDER_EXTERNAL_URL) {
       console.log(`Promptomate UI listening on port ${port} — public URL: ${process.env.RENDER_EXTERNAL_URL}`);

@@ -262,23 +262,20 @@
       return String(s).replace(/[&<>"']/g, (c) => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
     }
 
-    // POST to start a job (returns {id}), then open an SSE stream for the result.
-    function streamJob(startPath, streamBase, fetchOpts) {
-      return fetch(startPath, fetchOpts)
-        .then(r => r.json())
-        .then(({ id, error }) => {
-          if (error) throw new Error(error);
-          return new Promise((resolve, reject) => {
-            const src = new EventSource(`${streamBase}/${id}/stream`);
-            src.onmessage = (e) => {
-              const data = JSON.parse(e.data);
-              src.close();
-              if (data.type === "result") resolve(data);
-              else reject(new Error(data.message || "unknown error"));
-            };
-            src.onerror = () => { src.close(); reject(new Error("Connection lost")); };
-          });
-        });
+    // POST to start a job (returns {id}), then poll until done.
+    // Polling is used instead of SSE because SSE (EventSource) can't send auth headers
+    // and long-lived connections are unreliable through proxy layers like Render's nginx.
+    async function pollJob(startPath, fetchOpts) {
+      const { id, error } = await fetch(startPath, fetchOpts).then(r => r.json());
+      if (error) throw new Error(error);
+      while (true) {
+        await new Promise(r => setTimeout(r, 2000));
+        const data = await fetch(`/api/result/${id}`).then(r => r.json());
+        if (data.done) {
+          if (!data.ok) throw new Error(data.error || "unknown error");
+          return data;
+        }
+      }
     }
 
     async function handleTestAction(e) {
@@ -295,9 +292,8 @@
         if (action === "run") {
           badge.textContent = "running";
           badge.className = "status-badge running";
-          const data = await streamJob(
+          const data = await pollJob(
             `/api/run/${encodeURIComponent(name)}`,
-            "/api/run",
             { method: "POST" },
           );
           badge.textContent = data.passed ? "passed" : "failed";
@@ -307,9 +303,8 @@
         } else if (action === "triage") {
           badge.textContent = "triaging";
           badge.className = "status-badge running";
-          const data = await streamJob(
+          const data = await pollJob(
             `/api/triage/${encodeURIComponent(name)}?apply=true`,
-            "/api/triage",
             { method: "POST" },
           );
           const passed = data.finalStatus === "passed";
@@ -325,9 +320,8 @@
           if (!instruction) return;
           badge.textContent = "refining";
           badge.className = "status-badge running";
-          const data = await streamJob(
+          const data = await pollJob(
             `/api/refine/${encodeURIComponent(name)}`,
-            "/api/refine",
             { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ instruction }) },
           );
           badge.textContent = "refined";
@@ -393,9 +387,8 @@
       const btn = resultEl.querySelector(`[data-run-inline="${CSS.escape(name)}"]`);
       if (btn) { btn.disabled = true; btn.textContent = "Running…"; }
       try {
-        const data = await streamJob(
+        const data = await pollJob(
           `/api/run/${encodeURIComponent(name)}`,
-          "/api/run",
           { method: "POST" },
         );
         const detail = await fetch(`/api/test/${encodeURIComponent(name)}`).then(r => r.json());
