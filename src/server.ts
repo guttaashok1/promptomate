@@ -65,6 +65,7 @@ function sseStream<T>(
   res.setHeader("Content-Type", "text/event-stream");
   res.setHeader("Cache-Control", "no-cache");
   res.setHeader("Connection", "keep-alive");
+  res.setHeader("X-Accel-Buffering", "no"); // disable nginx proxy buffering
   res.flushHeaders?.();
 
   if (session.done) {
@@ -223,6 +224,7 @@ export function startServer(port: number): void {
     res.setHeader("Content-Type", "text/event-stream");
     res.setHeader("Cache-Control", "no-cache");
     res.setHeader("Connection", "keep-alive");
+    res.setHeader("X-Accel-Buffering", "no"); // disable nginx proxy buffering
     res.flushHeaders?.();
 
     for (const past of session.events) {
