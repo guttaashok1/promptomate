@@ -272,7 +272,11 @@
       if (error) throw new Error(error);
       for (let i = 0; i < 120; i++) { // max 4 minutes
         await new Promise(r => setTimeout(r, 2000));
-        const pollRes = await fetch(`/api/result/${id}`, { credentials: "same-origin" });
+        let pollRes;
+        try { pollRes = await fetch(`/api/result/${id}`, { credentials: "same-origin" }); }
+        catch { continue; } // network blip, retry
+        // 502/503/504 = server temporarily restarting under load, retry
+        if (pollRes.status === 502 || pollRes.status === 503 || pollRes.status === 504) continue;
         if (!pollRes.ok) throw new Error(`Poll failed: HTTP ${pollRes.status}`);
         const data = await pollRes.json();
         if (data.done) {
