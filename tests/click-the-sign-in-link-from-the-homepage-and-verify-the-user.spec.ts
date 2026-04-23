@@ -13,5 +13,5 @@ test("Sign in link from homepage reveals username and password fields", async ({
 
   await expect(username).toBeVisible();
   await expect(password).toBeVisible();
-  await expect(page.getByRole("button", { name: "Sign in" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Sign in", exact: true })).toBeVisible();
 });
