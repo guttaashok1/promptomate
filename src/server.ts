@@ -107,19 +107,33 @@ export function startServer(port: number): void {
   const app = express();
   app.use(express.json({ limit: "2mb" }));
 
-  app.get("/health", (_req, res) => {
+  app.get("/health", async (_req, res) => {
     const browsersPath = process.env.PLAYWRIGHT_BROWSERS_PATH ?? "(not set)";
     const binaryPath = browsersPath !== "(not set)"
       ? path.join(browsersPath, "chromium_headless_shell-1217", "chrome-headless-shell-linux64", "chrome-headless-shell")
       : null;
     const binaryExists = binaryPath ? fsSync.existsSync(binaryPath) : false;
+
+    // Try to actually launch the browser to catch missing system library errors
+    let browserLaunch: "ok" | string = "skipped";
+    if (binaryExists) {
+      try {
+        const { chromium } = await import("playwright-core");
+        const browser = await chromium.launch({ executablePath: binaryPath! });
+        await browser.close();
+        browserLaunch = "ok";
+      } catch (e) {
+        browserLaunch = (e as Error).message.split("\n")[0];
+      }
+    }
+
     res.json({
       ok: true,
       node: process.version,
       cwd: process.cwd(),
       PLAYWRIGHT_BROWSERS_PATH: browsersPath,
       browserBinaryExists: binaryExists,
-      binaryPath,
+      browserLaunch,
     });
   });
 
