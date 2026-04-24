@@ -3,6 +3,13 @@ import { test, expect } from "@playwright/test";
 test("home page loads with navigation and products", async ({ page }) => {
   await page.goto("https://practicesoftwaretesting.com/", { waitUntil: "domcontentloaded" });
 
+  // practicesoftwaretesting.com is behind Cloudflare; the initial load may show
+  // "Just a moment..." while the JS challenge runs. Wait up to 25s for it to clear.
+  await page.waitForFunction(
+    () => document.title !== "Just a moment...",
+    { timeout: 25_000 }
+  ).catch(() => { /* challenge didn't clear — let title assertion report the real error */ });
+
   await expect(page).toHaveURL("https://practicesoftwaretesting.com/");
   await expect(page).toHaveTitle("Practice Software Testing - Toolshop - v5.0");
 
