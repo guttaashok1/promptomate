@@ -29,6 +29,10 @@ export default defineConfig({
         "--use-mock-keychain",
         "--mute-audio",
         "--hide-scrollbars",
+        "--disk-cache-size=1",           // disable Chrome's on-disk page cache (saves /tmp space)
+        "--media-cache-size=1",          // disable Chrome's media cache
+        "--disable-back-forward-cache",  // don't keep pages in memory after navigation
+        "--disable-application-cache",   // disable HTML5 appcache
       ],
     },
     screenshot: "only-on-failure",

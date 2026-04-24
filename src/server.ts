@@ -349,15 +349,16 @@ export function startServer(port: number): void {
 function runPlaywright(specPath: string): Promise<{ passed: boolean; output: string }> {
   return new Promise((resolve) => {
     let output = "";
+    const MAX_OUTPUT = 64 * 1024; // 64 KB cap — Chrome's stderr is very verbose; prevent heap bloat
     const proc = spawn("npx", ["playwright", "test", specPath, "--reporter=list"], {
       env: process.env,
     });
     proc.stdout.on("data", (d: Buffer) => {
-      output += d.toString();
+      if (output.length < MAX_OUTPUT) output += d.toString();
     });
-    proc.stderr.on("data", (d: Buffer) => {
-      output += d.toString();
-    });
+    // Drain stderr without storing it — Chrome's debug output can be megabytes per run and
+    // accumulates in the Node.js heap across sequential tests, reducing headroom for Chrome.
+    proc.stderr.resume();
     proc.on("close", (code) => resolve({ passed: code === 0, output }));
   });
 }
