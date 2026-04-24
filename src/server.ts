@@ -53,9 +53,11 @@ function startAsyncSession<T>(
     .finally(() => {
       session.done = true;
       // Auto-expire: delete from map after 2 min to free output strings from Node heap.
-      // The polling client reads the result within a few seconds of done=true, so 2 min
-      // is ample. Without this, sequential test runs accumulate stored output indefinitely.
       setTimeout(() => asyncSessions.delete(key), 2 * 60 * 1000);
+      // Force a full GC cycle ~1s after the test completes.
+      // --expose-gc must be in the node start command for this to work (falls back silently).
+      // This compacts fragmented V8 heap between tests, freeing RAM for the next Chrome launch.
+      setTimeout(() => (global as NodeJS.Global & { gc?: () => void }).gc?.(), 1000);
     });
   return session;
 }
@@ -273,7 +275,8 @@ export function startServer(port: number): void {
       });
       return { ...result, durationMs };
     });
-    res.json({ id });
+    const mem = process.memoryUsage();
+    res.json({ id, _rss: Math.round(mem.rss / 1048576), _heap: Math.round(mem.heapUsed / 1048576) });
   });
 
   app.get("/api/run/:id/stream", (req: Request, res: Response) => {
@@ -359,6 +362,16 @@ function runPlaywright(specPath: string): Promise<{ passed: boolean; output: str
     // Drain stderr without storing it — Chrome's debug output can be megabytes per run and
     // accumulates in the Node.js heap across sequential tests, reducing headroom for Chrome.
     proc.stderr.resume();
-    proc.on("close", (code) => resolve({ passed: code === 0, output }));
+    proc.on("close", (code) => {
+      resolve({ passed: code === 0, output });
+      // Clean up Chrome/Playwright temp dirs from /tmp.
+      // On Render, /tmp is often a RAM-backed tmpfs — orphaned Chrome user-data directories
+      // (from previous test runs) consume RAM even after Chrome exits. After 6 tests these
+      // can total 100-300MB, leaving too little headroom for the 7th Chrome launch.
+      spawn("sh", ["-c", "rm -rf /tmp/playwright_* /tmp/pw_* /tmp/.com.google.Chrome* 2>/dev/null"], {
+        stdio: "ignore",
+        detached: true,
+      }).unref();
+    });
   });
 }
