@@ -1,6 +1,9 @@
 import { test, expect } from "@playwright/test";
 
 test("Sign in link from homepage reveals username and password fields", async ({ page }) => {
+  // Block images and fonts to reduce Chrome memory usage on resource-constrained servers
+  await page.route(/\.(png|jpg|jpeg|gif|svg|ico|woff2?|ttf|eot|otf)(\?.*)?$/i, route => route.abort());
+
   await page.goto("https://github.com", { waitUntil: "domcontentloaded" });
 
   await page.getByRole("link", { name: "Sign in" }).click();
