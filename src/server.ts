@@ -121,9 +121,13 @@ export function startServer(port: number): void {
       : null;
     const binaryExists = binaryPath ? fsSync.existsSync(binaryPath) : false;
 
-    // Try to actually launch the browser to catch missing system library errors
+    // Launch Chrome only when no test is already running.
+    // Render probes /health every ~10-30s; launching Chrome here while a test
+    // already has Chrome active creates two simultaneous Chrome instances
+    // (~200MB each) that together with Node+npx exceed the 512MB free-tier limit.
+    const isTestRunning = [...asyncSessions.values()].some((s) => !s.done);
     let browserLaunch: "ok" | string = "skipped";
-    if (binaryExists) {
+    if (binaryExists && !isTestRunning) {
       try {
         const { chromium } = await import("playwright-core");
         const browser = await chromium.launch({ executablePath: binaryPath! });
@@ -132,6 +136,8 @@ export function startServer(port: number): void {
       } catch (e) {
         browserLaunch = (e as Error).message.split("\n")[0];
       }
+    } else if (isTestRunning) {
+      browserLaunch = "skipped-test-running";
     }
 
     res.json({
