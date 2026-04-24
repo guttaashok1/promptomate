@@ -52,6 +52,10 @@ function startAsyncSession<T>(
     })
     .finally(() => {
       session.done = true;
+      // Auto-expire: delete from map after 2 min to free output strings from Node heap.
+      // The polling client reads the result within a few seconds of done=true, so 2 min
+      // is ample. Without this, sequential test runs accumulate stored output indefinitely.
+      setTimeout(() => asyncSessions.delete(key), 2 * 60 * 1000);
     });
   return session;
 }
